@@ -10,3 +10,4 @@ data
 .idea
 .DS_Store
 Thumbs.db
+fly.toml
