@@ -14,6 +14,9 @@ import {
   handleCombatUpdateButton,
   handleCombatJoinModal,
   handleCombatUpdateModal,
+  handleCombatPledgeEditButton,
+  handleCombatPledgeAddButton,
+  handleCombatPledgeAddModal,
   handleDefenseCommand,
   handleOffenseCommand,
   handleReinforceCommand,
@@ -118,10 +121,12 @@ export async function routeButton(interaction) {
     }
 
     if (ns === 'combat') {
-      if (action === 'join')     return await handleCombatJoinButton(interaction);
-      if (action === 'withdraw') return await handleCombatWithdrawButton(interaction);
-      if (action === 'close')    return await handleCombatCloseButton(interaction);
-      if (action === 'update')   return await handleCombatUpdateButton(interaction);
+      if (action === 'join')         return await handleCombatJoinButton(interaction);
+      if (action === 'withdraw')     return await handleCombatWithdrawButton(interaction);
+      if (action === 'close')        return await handleCombatCloseButton(interaction);
+      if (action === 'update')       return await handleCombatUpdateButton(interaction);
+      if (action === 'pledge_edit')  return await handleCombatPledgeEditButton(interaction);
+      if (action === 'pledge_add')   return await handleCombatPledgeAddButton(interaction);
     }
 
     if (ns === 'scout') {
@@ -145,8 +150,8 @@ export async function routeButton(interaction) {
 export async function routeSelect(interaction) {
   const id = interaction.customId;
   try {
-    if (id === 'profile:tribe-select') return await handleTribeSelect(interaction);
-    if (id === 'help:category')        return await handleHelpSelect(interaction);
+    if (id === 'profile:tribe-select')   return await handleTribeSelect(interaction);
+    if (id === 'help:category')          return await handleHelpSelect(interaction);
     return await interaction.reply({ content: 'Unknown selection.', ephemeral: true });
   } catch (err) {
     logger.error('Select error [%s]:', id, err);
@@ -162,8 +167,9 @@ export async function routeModal(interaction) {
     if (id.startsWith('push:create:'))          return await handlePushCreateModal(interaction);
     if (id.startsWith('pledge:submit:'))        return await handlePledgeSubmitModal(interaction);
     if (id.startsWith('combat:create:'))        return await handleCombatCreateModal(interaction);
-    if (id.startsWith('combat:join_submit:'))   return await handleCombatJoinModal(interaction);
-    if (id.startsWith('combat:update_submit:')) return await handleCombatUpdateModal(interaction);
+    if (id.startsWith('combat:join_submit:'))        return await handleCombatJoinModal(interaction);
+    if (id.startsWith('combat:update_submit:'))      return await handleCombatUpdateModal(interaction);
+    if (id.startsWith('combat:pledge_add_submit:'))  return await handleCombatPledgeAddModal(interaction);
     if (id === 'scout:create')                  return await handleScoutCreateModal(interaction);
     if (id.startsWith('scout:report_submit:'))  return await handleScoutReportModal(interaction);
     if (id === 'profile:save')                  return await handleProfileModal(interaction);

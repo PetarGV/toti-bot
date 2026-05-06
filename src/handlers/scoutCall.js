@@ -233,7 +233,7 @@ export function buildScoutEmbed(call, pledges) {
     .setTitle(`${statusPrefix}👀 Scout Request`)
     .addFields(
       { name: 'Requester', value: `<@${call.author_id}>`, inline: true },
-      { name: 'Coords',    value: `${formatCoords(call.x, call.y)}${coordsExtra}`, inline: true },
+      { name: 'Coords',    value: `[${formatCoords(call.x, call.y)}](${mapUrl(call.x, call.y)})${coordsExtra}`, inline: true },
     );
 
   if (payload.notes) embed.addFields({ name: 'Notes', value: payload.notes, inline: false });

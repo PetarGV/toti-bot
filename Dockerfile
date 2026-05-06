@@ -2,6 +2,9 @@ FROM node:20-alpine
 
 WORKDIR /app
 
+# Run the bot in UTC — deadline parsing, embeds, and logs are all GMT 0.
+ENV TZ=UTC
+
 RUN apk add --no-cache wget
 
 COPY package.json ./

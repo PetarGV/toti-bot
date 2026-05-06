@@ -67,7 +67,7 @@ export const commandDefinitions = [
     .addStringOption(o => o.setName('coords').setDescription('Village under attack coords').setRequired(true))
     .addStringOption(o => o.setName('arrival').setDescription('Attack arrival time e.g. 14:30 or "in 1h30m"').setRequired(true))
     .addStringOption(o => o.setName('attacker').setDescription('Attacker name / alliance'))
-    .addIntegerOption(o => o.setName('troops').setDescription('Troops needed (approx)')),
+    .addStringOption(o => o.setName('troops').setDescription('Troops needed (free text, e.g. "5k phalanx")')),
 
   new SlashCommandBuilder()
     .setName('offense')

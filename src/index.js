@@ -1,3 +1,7 @@
+// Force UTC for all Date operations (deadline parsing, formatting, logs).
+// Must run before any Date is constructed, so it stays at the top of the file.
+process.env.TZ = 'UTC';
+
 import 'dotenv/config';
 import { Client, GatewayIntentBits, InteractionType, Events } from 'discord.js';
 import { initDb, prepare, flushDb } from './db/client.js';

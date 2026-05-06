@@ -6,7 +6,7 @@ import {
 import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl, rallyUrl } from '../utils/travianUrl.js';
-import { discordTimestamp, parseDeadline } from '../utils/time.js';
+import { discordTimestamp, parseDeadline, formatDeadline } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getDefRoleMention } from '../utils/role.js';
@@ -51,7 +51,7 @@ export async function handleCombatButton(interaction) {
 
   const arrivalInput = new TextInputBuilder()
     .setCustomId('arrival')
-    .setLabel('Arrival/needed by (e.g. 14:30 or in 1h30m)')
+    .setLabel('Arrival (14:30:45 · in 2h30m · 2026-05-06 14:30:45)')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setPlaceholder('in 2h')
@@ -198,7 +198,8 @@ export async function handleReinforceCommand(interaction) {
 
 // ── Response button handlers ─────────────────────────────────────────────────
 
-// combat:join:<callId> — opens modal
+// combat:join:<callId> — first-time pledge opens modal directly;
+// repeat pledge shows an ephemeral Edit/Add choice
 export async function handleCombatJoinButton(interaction) {
   const callId = interaction.customId.split(':')[2];
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
@@ -206,11 +207,32 @@ export async function handleCombatJoinButton(interaction) {
     return interaction.reply({ content: 'This call is no longer open.', ephemeral: true });
   }
 
+  const existing = prepare('SELECT amount FROM pledges WHERE call_id = ? AND user_id = ?')
+    .get(callId, interaction.user.id);
+
+  if (existing) {
+    const choiceRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`combat:pledge_edit:${callId}`).setStyle(ButtonStyle.Primary).setLabel('Edit pledge').setEmoji('✏️'),
+      new ButtonBuilder().setCustomId(`combat:pledge_add:${callId}`).setStyle(ButtonStyle.Success).setLabel('Add to pledge').setEmoji('➕'),
+    );
+    return interaction.reply({
+      content: `You already pledged: **${existing.amount ?? 'On it'}**\nEdit replaces it; Add appends more troops.`,
+      components: [choiceRow],
+      ephemeral: true,
+    });
+  }
+
+  await showJoinModal(interaction, call, callId, /* prefill */ '');
+}
+
+// Helper: open the troops modal. submitId selects the modal handler;
+// prefill seeds the input value (used by Edit).
+async function showJoinModal(interaction, call, callId, prefill, submitId = `combat:join_submit:${callId}`, title) {
   const config = COMBAT_CONFIG[call.type] ?? COMBAT_CONFIG.defense;
 
   const modal = new ModalBuilder()
-    .setCustomId(`combat:join_submit:${callId}`)
-    .setTitle(config.joinLabel);
+    .setCustomId(submitId)
+    .setTitle(title ?? config.joinLabel);
 
   const troopsInput = new TextInputBuilder()
     .setCustomId('troops')
@@ -220,8 +242,32 @@ export async function handleCombatJoinButton(interaction) {
     .setPlaceholder('5k inf, 200 cav')
     .setMaxLength(200);
 
+  if (prefill) troopsInput.setValue(prefill);
+
   modal.addComponents(new ActionRowBuilder().addComponents(troopsInput));
   await interaction.showModal(modal);
+}
+
+// combat:pledge_edit:<callId> — opens modal pre-filled with existing pledge; submit overwrites
+export async function handleCombatPledgeEditButton(interaction) {
+  const callId = interaction.customId.split(':')[2];
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call || call.status !== 'open') {
+    return interaction.reply({ content: 'This call is no longer open.', ephemeral: true });
+  }
+  const existing = prepare('SELECT amount FROM pledges WHERE call_id = ? AND user_id = ?')
+    .get(callId, interaction.user.id);
+  await showJoinModal(interaction, call, callId, existing?.amount ?? '', `combat:join_submit:${callId}`, 'Edit pledge');
+}
+
+// combat:pledge_add:<callId> — opens empty modal; submit appends to existing pledge
+export async function handleCombatPledgeAddButton(interaction) {
+  const callId = interaction.customId.split(':')[2];
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call || call.status !== 'open') {
+    return interaction.reply({ content: 'This call is no longer open.', ephemeral: true });
+  }
+  await showJoinModal(interaction, call, callId, '', `combat:pledge_add_submit:${callId}`, 'Add to pledge');
 }
 
 // combat:withdraw:<callId>
@@ -282,10 +328,10 @@ export async function handleCombatUpdateButton(interaction) {
 
   const arrivalInput = new TextInputBuilder()
     .setCustomId('arrival')
-    .setLabel('Arrival/needed by')
+    .setLabel('Arrival (14:30:45 · in 2h30m · 2026-05-06 14:30:45)')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
-    .setValue(call.deadline ? String(call.deadline) : '')
+    .setValue(call.deadline ? formatDeadline(call.deadline) : '')
     .setMaxLength(30);
 
   const troopsInput = new TextInputBuilder()
@@ -343,6 +389,49 @@ export async function handleCombatJoinModal(interaction) {
 
   notifyAuthorOfPledge(interaction.client, callId, interaction.user.id, troopsText).catch(err => logger.warn('notify pledge:', err.message));
   notifyAuthorIfMilestone(interaction.client, callId).catch(err => logger.warn('notify milestone:', err.message));
+}
+
+// ── Modal: combat:pledge_add_submit:<callId> — append to existing pledge ─────
+export async function handleCombatPledgeAddModal(interaction) {
+  const callId = parseInt(interaction.customId.split(':')[2], 10);
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call || call.status !== 'open') {
+    return interaction.reply({ content: 'This call is no longer open.', ephemeral: true });
+  }
+
+  const addText = interaction.fields.getTextInputValue('troops').trim();
+  if (!addText) {
+    return interaction.reply({ content: '❌ Nothing to add — type some troops.', ephemeral: true });
+  }
+
+  const existing = prepare('SELECT amount FROM pledges WHERE call_id = ? AND user_id = ?')
+    .get(callId, interaction.user.id);
+
+  if (existing) {
+    const combined = existing.amount ? `${existing.amount}, +${addText}` : addText;
+    prepare('UPDATE pledges SET amount = ? WHERE call_id = ? AND user_id = ?')
+      .run(combined, callId, interaction.user.id);
+    inc('pledgesSubmitted');
+
+    const { refreshCall } = await import('./calls.js');
+    await refreshCall(interaction.client, callId);
+    await interaction.reply({ content: `✅ Added: **+${addText}**\nTotal: ${combined}`, ephemeral: true });
+
+    notifyAuthorOfPledge(interaction.client, callId, interaction.user.id, `+${addText}`).catch(err => logger.warn('notify pledge:', err.message));
+    notifyAuthorIfMilestone(interaction.client, callId).catch(err => logger.warn('notify milestone:', err.message));
+  } else {
+    // No prior pledge — fall back to insert
+    prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
+      .run(callId, interaction.user.id, addText);
+    inc('pledgesSubmitted');
+
+    const { refreshCall } = await import('./calls.js');
+    await refreshCall(interaction.client, callId);
+    await interaction.reply({ content: `✅ Commitment recorded: ${addText}`, ephemeral: true });
+
+    notifyAuthorOfPledge(interaction.client, callId, interaction.user.id, addText).catch(err => logger.warn('notify pledge:', err.message));
+    notifyAuthorIfMilestone(interaction.client, callId).catch(err => logger.warn('notify milestone:', err.message));
+  }
 }
 
 // ── Modal: combat:update_submit:<callId> ─────────────────────────────────────
@@ -408,8 +497,8 @@ export function buildCombatEmbed(call, pledges) {
     .setTitle(title)
     .addFields(
       { name: 'Author',   value: `<@${call.author_id}>`, inline: true },
-      { name: 'Coords',   value: `${formatCoords(call.x, call.y)}${coordsExtra}`, inline: true },
-      { name: 'Arrival',  value: call.deadline ? `${discordTimestamp(call.deadline, 'F')} (${discordTimestamp(call.deadline, 'R')})` : '*Unknown*', inline: true },
+      { name: 'Coords',   value: `[${formatCoords(call.x, call.y)}](${mapUrl(call.x, call.y)})${coordsExtra}`, inline: true },
+      { name: 'Arrival',  value: call.deadline ? `${discordTimestamp(call.deadline, 'D')} ${discordTimestamp(call.deadline, 'T')} (${discordTimestamp(call.deadline, 'R')})` : '*Unknown*', inline: true },
     );
 
   if (payload.attacker) embed.addFields({ name: 'Attacker / target', value: payload.attacker, inline: false });
@@ -441,7 +530,7 @@ export function buildCombatComponents(call) {
 
   const linkRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Map').setEmoji('🗺️').setURL(mapUrl(call.x, call.y)),
-    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Rally Point').setEmoji('⚔️').setURL(rallyUrl(call.x, call.y)),
+    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Send Troops').setEmoji('🚀').setURL(rallyUrl(call.x, call.y)),
   );
 
   if (call.status !== 'open') return [linkRow];
@@ -463,3 +552,4 @@ for (const type of ['defense', 'offense', 'reinforce', 'urgent']) {
     buildComponents: (call)          => buildCombatComponents(call),
   });
 }
+
