@@ -4,19 +4,13 @@ export const commandDefinitions = [
   // ── Admin ───────────────────────────────────────────────────────────────
   new SlashCommandBuilder()
     .setName('setup')
-    .setDescription('Post a panel in this channel (admin only)')
+    .setDescription('Post a pinned panel in this channel (admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-    .addStringOption(o =>
-      o.setName('type')
-        .setDescription('Panel type')
-        .setRequired(true)
-        .addChoices(
-          { name: 'Defense & Combat', value: 'defense' },
-          { name: 'Resource Push',    value: 'resources' },
-          { name: 'Intel & Scouting', value: 'intel' },
-          { name: 'General',          value: 'general' },
-        )
-    ),
+    .addSubcommand(s => s.setName('defense').setDescription('Defense operations panel'))
+    .addSubcommand(s => s.setName('offense').setDescription('Offense operations panel'))
+    .addSubcommand(s => s.setName('scout').setDescription('Scouting & intel panel'))
+    .addSubcommand(s => s.setName('resources').setDescription('Resource push panel'))
+    .addSubcommand(s => s.setName('general').setDescription('Status & overview panel')),
 
   new SlashCommandBuilder()
     .setName('admin')

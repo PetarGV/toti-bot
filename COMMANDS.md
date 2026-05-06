@@ -164,7 +164,11 @@ All admin commands require Administrator permission.
 ### Setup
 | Command | Args | Description |
 |---|---|---|
-| `/setup` | `type` | Post + pin a panel in the current channel. Types: `defense`, `resources`, `intel`, `general` |
+| `/setup defense` | — | Post + pin the **Defense** panel (Defense Call, Reinforce, URGENT) |
+| `/setup offense` | — | Post + pin the **Offense** panel (Offense Call, Whois) |
+| `/setup scout` | — | Post + pin the **Scout** panel (Scout Request, Whois, Report) |
+| `/setup resources` | — | Post + pin the **Resources** panel (push buttons) |
+| `/setup general` | — | Post + pin the **General** panel (Status, Calls, Profile) |
 
 ### Configuration
 | Command | Args | Description |

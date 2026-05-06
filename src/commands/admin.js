@@ -17,7 +17,7 @@ const LOG_DIR  = process.env.LOG_DIR || join(__dirname, '../../data/logs');
 const SECRET_RE = /(token|password|secret|api[_-]?key)/i;
 
 export async function handleSetup(interaction) {
-  const type = interaction.options.getString('type');
+  const type = interaction.options.getSubcommand();
   await deployPanel(interaction, type);
 }
 

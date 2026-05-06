@@ -4,7 +4,7 @@ Discord bot for Travian T4.6 alliance coordination. Pinned button panels for res
 
 ## Features
 
-- **Pinned panels per channel** — separate panels for resources / defense / intel / general
+- **Pinned panels per channel** — separate panels for defense / offense / scout / resources / general
 - **Resource push** — pledge tracking, progress bars, auto-fill on delivery
 - **Combat calls** — defense, offense, reinforce, urgent (`@def-crew` ping), responder tally, auto-expiry on arrival
 - **Scout requests** — inline reports visible to channel
@@ -43,7 +43,7 @@ docker compose up -d --build
 4. Fill `.env` with `DISCORD_TOKEN`, `CLIENT_ID` (Application ID), `GUILD_ID`
 5. `npm install && npm run deploy-commands`
 6. `npm start` (or `docker compose up -d`)
-7. In each channel, run `/setup type:<resources|defense|intel|general>` to post a pinned panel
+7. In each channel, run `/setup <defense|offense|scout|resources|general>` to post a pinned panel
 8. (Optional) Create a role named `def-crew` so combat calls can ping defenders
 
 ## Slash commands

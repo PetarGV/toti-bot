@@ -2,12 +2,13 @@ import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder
 } from 'discord.js';
 
-export const PANEL_TYPES = ['defense', 'resources', 'intel', 'general'];
+export const PANEL_TYPES = ['defense', 'offense', 'resources', 'scout', 'general'];
 
 const COLOR = {
   defense:   0xe74c3c,
+  offense:   0x992d22,
   resources: 0x2ecc71,
-  intel:     0x3498db,
+  scout:     0x3498db,
   general:   0x9b59b6,
 };
 
@@ -32,16 +33,18 @@ export function buildPanel(type) {
 }
 
 const titles = {
-  defense:   '⚔️ Defense & Combat Operations',
+  defense:   '🛡️ Defense Operations',
+  offense:   '⚔️ Offense Operations',
   resources: '📦 Resource Push',
-  intel:     '🔍 Intelligence & Scouting',
+  scout:     '🔍 Scouting & Intel',
   general:   '📊 Status & Overview',
 };
 
 const descriptions = {
-  defense:   'Use the buttons below to call for defense, launch attacks, or request reinforcements.',
+  defense:   'Call for defense, request reinforcements, or escalate to URGENT for critical attacks.',
+  offense:   'Coordinate offensive operations. Look up targets and post offense calls.',
   resources: 'Request resource pushes from alliance members. Select the resource type to get started.',
-  intel:     'Request scouts, look up villages, or report enemy sightings.',
+  scout:     'Request scouts, look up villages, or report enemy sightings.',
   general:   'View active calls, check your profile, and manage your settings.',
 };
 
@@ -49,13 +52,19 @@ const rowBuilders = {
   defense: () => [
     new ActionRowBuilder().addComponents(
       btn('call:defense', 'Defense Call', '🛡️', ButtonStyle.Danger),
-      btn('call:offense', 'Offense Call', '⚔️', ButtonStyle.Danger),
       btn('call:urgent',  'URGENT',       '🚨', ButtonStyle.Danger),
+      btn('call:reinforce', 'Reinforce',  '🤝'),
     ),
     new ActionRowBuilder().addComponents(
-      btn('call:reinforce', 'Reinforce',    '🤝'),
-      btn('call:scout',     'Scout',        '👀'),
       btn('panel:calls',    'Active Calls', '📋'),
+    ),
+  ],
+
+  offense: () => [
+    new ActionRowBuilder().addComponents(
+      btn('call:offense', 'Offense Call', '⚔️', ButtonStyle.Danger),
+      btn('intel:whois',  'Whois Lookup', '🔍'),
+      btn('panel:calls',  'Active Calls', '📋'),
     ),
   ],
 
@@ -72,7 +81,7 @@ const rowBuilders = {
     ),
   ],
 
-  intel: () => [
+  scout: () => [
     new ActionRowBuilder().addComponents(
       btn('call:scout',   'Scout Request', '👀'),
       btn('intel:whois',  'Whois Lookup',  '🔍'),

@@ -46,4 +46,10 @@ export function runMigrations() {
   } catch (err) {
     logger.warn('Migration timers table skipped:', err.message);
   }
+
+  try {
+    exec("UPDATE panels SET type='scout' WHERE type='intel'");
+  } catch (err) {
+    logger.warn("Migration panels.type intel→scout skipped:", err.message);
+  }
 }
