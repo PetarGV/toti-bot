@@ -6,6 +6,7 @@ import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl } from '../utils/travianUrl.js';
 import { getTribe } from '../utils/tribes.js';
+import { getUsersByIgn } from '../utils/ign.js';
 
 export async function handleWhoisCommand(interaction) {
   const coords = interaction.options.getString('coords');
@@ -87,6 +88,18 @@ async function renderWhois(interaction, coordsInput) {
     { name: 'Alliance',   value: village.alliance ?? '*None*',       inline: true },
     { name: 'Population', value: Number(village.population).toLocaleString(), inline: true },
   );
+
+  if (!isNature && !isUnoccupied && village.player) {
+    const linked = getUsersByIgn(village.player);
+    if (linked.length) {
+      const label = linked.length === 1 ? 'Discord account' : `Discord accounts (${linked.length}-dual)`;
+      embed.addFields({
+        name: label,
+        value: linked.map(u => `<@${u.discord_id}>`).join(', '),
+        inline: false,
+      });
+    }
+  }
 
   if (village.fetched_at) {
     embed.setFooter({ text: 'Map data updated' }).setTimestamp(new Date(village.fetched_at * 1000));

@@ -5,6 +5,7 @@ import { formatCoords } from '../utils/coords.js';
 import { discordTimestamp } from '../utils/time.js';
 import { getTribe } from '../utils/tribes.js';
 import { COLORS, FOOTER, callTypeLabel } from '../utils/i18n.js';
+import { getDualsForUser } from '../utils/ign.js';
 
 async function renderStatus(interaction) {
   const userId  = interaction.user.id;
@@ -36,11 +37,15 @@ async function renderStatus(interaction) {
   }
 
   const tribeMeta = profile?.tribe ? getTribe(profile.tribe) : null;
+  const duals = getDualsForUser(userId);
   const profileLines = [
     `**IGN:** ${profile?.ign ?? '*not set*'}`,
     `**Home:** ${profile?.home_x != null ? formatCoords(profile.home_x, profile.home_y) : '*not set*'}`,
     `**Tribe:** ${tribeMeta ? `${tribeMeta.emoji} ${tribeMeta.name}` : '*not set*'}`,
   ];
+  if (duals.length) {
+    profileLines.push(`**Shared with:** ${duals.map(d => `<@${d.discord_id}>`).join(', ')}`);
+  }
 
   const callLines = openCalls.length
     ? openCalls.map(c => {
