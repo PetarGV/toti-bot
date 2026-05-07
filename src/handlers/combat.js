@@ -51,10 +51,10 @@ export async function handleCombatButton(interaction) {
 
   const arrivalInput = new TextInputBuilder()
     .setCustomId('arrival')
-    .setLabel('Arrival (14:30:45 · in 2h30m · 2026-05-06 14:30:45)')
+    .setLabel('Arrival time (UTC)')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
-    .setPlaceholder('in 2h')
+    .setPlaceholder('14:30:45 · in 2h30m · 2026-05-06 14:30:45')
     .setMaxLength(30);
 
   const attackerInput = new TextInputBuilder()
@@ -328,10 +328,11 @@ export async function handleCombatUpdateButton(interaction) {
 
   const arrivalInput = new TextInputBuilder()
     .setCustomId('arrival')
-    .setLabel('Arrival (14:30:45 · in 2h30m · 2026-05-06 14:30:45)')
+    .setLabel('Arrival time (UTC)')
     .setStyle(TextInputStyle.Short)
     .setRequired(true)
     .setValue(call.deadline ? formatDeadline(call.deadline) : '')
+    .setPlaceholder('14:30:45 · in 2h30m · 2026-05-06 14:30:45')
     .setMaxLength(30);
 
   const troopsInput = new TextInputBuilder()
