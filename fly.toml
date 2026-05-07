@@ -1,6 +1,5 @@
 # Fly.io deployment config.
-# If "toti-bot" is taken globally on Fly, run `fly launch --copy-config` and
-# pick a different unique app name.
+# If the app name is taken globally on Fly, change it here and re-run setup.
 
 app = "toti-bot"
 primary_region = "fra"   # Frankfurt — change to your closest Fly region
