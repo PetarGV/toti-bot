@@ -17,6 +17,10 @@ import {
   handleCombatPledgeEditButton,
   handleCombatPledgeAddButton,
   handleCombatPledgeAddModal,
+  handleCombatPickButton,
+  handleCombatPickSelect,
+  handleCombatPickContinueButton,
+  handleCombatPickModal,
   handleDefenseCommand,
   handleOffenseCommand,
   handleReinforceCommand,
@@ -127,6 +131,12 @@ export async function routeButton(interaction) {
       if (action === 'update')       return await handleCombatUpdateButton(interaction);
       if (action === 'pledge_edit')  return await handleCombatPledgeEditButton(interaction);
       if (action === 'pledge_add')   return await handleCombatPledgeAddButton(interaction);
+      if (action === 'pick') {
+        // combat:pick:<id>          → entry (open picker UI)
+        // combat:pick:<id>:next:... → continue button (open seconds modal)
+        if (id.split(':')[3] === 'next') return await handleCombatPickContinueButton(interaction);
+        return await handleCombatPickButton(interaction);
+      }
     }
 
     if (ns === 'scout') {
@@ -152,6 +162,7 @@ export async function routeSelect(interaction) {
   try {
     if (id === 'profile:tribe-select')   return await handleTribeSelect(interaction);
     if (id === 'help:category')          return await handleHelpSelect(interaction);
+    if (id.startsWith('combat:pick:'))   return await handleCombatPickSelect(interaction);
     return await interaction.reply({ content: 'Unknown selection.', ephemeral: true });
   } catch (err) {
     logger.error('Select error [%s]:', id, err);
@@ -170,6 +181,7 @@ export async function routeModal(interaction) {
     if (id.startsWith('combat:join_submit:'))        return await handleCombatJoinModal(interaction);
     if (id.startsWith('combat:update_submit:'))      return await handleCombatUpdateModal(interaction);
     if (id.startsWith('combat:pledge_add_submit:'))  return await handleCombatPledgeAddModal(interaction);
+    if (id.startsWith('combat:pick_submit:'))        return await handleCombatPickModal(interaction);
     if (id === 'scout:create')                  return await handleScoutCreateModal(interaction);
     if (id.startsWith('scout:report_submit:'))  return await handleScoutReportModal(interaction);
     if (id === 'profile:save')                  return await handleProfileModal(interaction);

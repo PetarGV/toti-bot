@@ -1,6 +1,7 @@
 import {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   ModalBuilder, TextInputBuilder, TextInputStyle,
+  StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
   PermissionFlagsBits,
 } from 'discord.js';
 import { prepare } from '../db/client.js';
@@ -540,6 +541,7 @@ export function buildCombatComponents(call) {
     new ButtonBuilder().setCustomId(`combat:join:${id}`).setStyle(ButtonStyle.Success).setLabel(config.joinLabel).setEmoji('✅'),
     new ButtonBuilder().setCustomId(`combat:withdraw:${id}`).setStyle(ButtonStyle.Secondary).setLabel('Withdraw').setEmoji('❌'),
     new ButtonBuilder().setCustomId(`combat:update:${id}`).setStyle(ButtonStyle.Secondary).setLabel('Update').setEmoji('🔄'),
+    new ButtonBuilder().setCustomId(`combat:pick:${id}`).setStyle(ButtonStyle.Secondary).setLabel('Pick time').setEmoji('📅'),
     new ButtonBuilder().setCustomId(`combat:close:${id}`).setStyle(ButtonStyle.Danger).setLabel('Close').setEmoji('🔒'),
   );
 
@@ -551,6 +553,212 @@ for (const type of ['defense', 'offense', 'reinforce', 'urgent']) {
   registerRenderer(type, {
     buildEmbed:      (call, pledges) => buildCombatEmbed(call, pledges),
     buildComponents: (call)          => buildCombatComponents(call),
+  });
+}
+
+// ── Hybrid picker: 3 select menus (date/hour/minute) → modal for seconds ─────
+// Stage 1 (in Discord): ephemeral message with three dropdowns and a Continue
+// button. Live preview at the top updates as you pick each value.
+// Stage 2 (modal): one tiny field asking for seconds (0-59), pre-filled with
+// the current call's seconds. Submit saves the full UTC deadline.
+
+const PICK_MAX_DAYS = 15;
+
+function pickTodayUtcMidnight() {
+  const t = new Date();
+  t.setUTCHours(0, 0, 0, 0);
+  return t.getTime();
+}
+
+function pickUnixForState(dayOffset, hour, minute, seconds = 0) {
+  const ms = pickTodayUtcMidnight()
+    + dayOffset * 86400_000
+    + hour * 3600_000
+    + minute * 60_000
+    + seconds * 1000;
+  return Math.floor(ms / 1000);
+}
+
+function pickStateFromDeadline(unix) {
+  if (!unix) {
+    const t = new Date();
+    t.setUTCHours(t.getUTCHours() + 1, 0, 0, 0);
+    const offset = Math.floor((t.getTime() - pickTodayUtcMidnight()) / 86400_000);
+    return { dayOffset: Math.max(0, Math.min(PICK_MAX_DAYS - 1, offset)), hour: t.getUTCHours(), minute: 0, seconds: 0 };
+  }
+  const d = new Date(unix * 1000);
+  const offset = Math.floor((d.getTime() - pickTodayUtcMidnight()) / 86400_000);
+  return {
+    dayOffset: Math.max(0, Math.min(PICK_MAX_DAYS - 1, offset)),
+    hour:    d.getUTCHours(),
+    minute:  d.getUTCMinutes(),
+    seconds: d.getUTCSeconds(),
+  };
+}
+
+const PICK_DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function pickDateLabel(i) {
+  if (i === 0) return 'Today';
+  if (i === 1) return 'Tomorrow';
+  const d = new Date(pickTodayUtcMidnight() + i * 86400_000);
+  return `${PICK_DOW[d.getUTCDay()]} +${i}d`;
+}
+
+// Minute select can hold 25 options max. Use 5-min steps (0..55 = 12 values).
+const PICK_MINUTES = Array.from({ length: 12 }, (_, i) => i * 5);
+
+function buildPickerPayload(callId, { dayOffset, hour, minute }) {
+  const dateSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:pick:${callId}:date:${hour}:${minute}`)
+    .setPlaceholder('Date')
+    .addOptions(
+      Array.from({ length: PICK_MAX_DAYS }, (_, i) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(pickDateLabel(i))
+          .setValue(String(i))
+          .setDefault(i === dayOffset)
+      )
+    );
+
+  const hourSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:pick:${callId}:hour:${dayOffset}:${minute}`)
+    .setPlaceholder('Hour (UTC)')
+    .addOptions(
+      Array.from({ length: 24 }, (_, i) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(`${String(i).padStart(2, '0')}:00 UTC`)
+          .setValue(String(i))
+          .setDefault(i === hour)
+      )
+    );
+
+  // Snap displayed minute to the nearest 5-min slot for the default highlight.
+  const minSnap = PICK_MINUTES.reduce((best, m) => Math.abs(m - minute) < Math.abs(best - minute) ? m : best, 0);
+  const minSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:pick:${callId}:min:${dayOffset}:${hour}`)
+    .setPlaceholder('Minute (5-min steps; seconds in next step)')
+    .addOptions(
+      PICK_MINUTES.map(m =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(`:${String(m).padStart(2, '0')}`)
+          .setValue(String(m))
+          .setDefault(m === minSnap)
+      )
+    );
+
+  const continueBtn = new ButtonBuilder()
+    .setCustomId(`combat:pick:${callId}:next:${dayOffset}:${hour}:${minute}`)
+    .setStyle(ButtonStyle.Primary)
+    .setLabel('Continue → seconds')
+    .setEmoji('⏱️');
+
+  const preview = pickUnixForState(dayOffset, hour, minute, 0);
+
+  return {
+    content: `📅 **Pick deadline (UTC)** — _seconds in next step_\n→ ${discordTimestamp(preview, 'D')} ${discordTimestamp(preview, 'T')} (${discordTimestamp(preview, 'R')})`,
+    components: [
+      new ActionRowBuilder().addComponents(dateSelect),
+      new ActionRowBuilder().addComponents(hourSelect),
+      new ActionRowBuilder().addComponents(minSelect),
+      new ActionRowBuilder().addComponents(continueBtn),
+    ],
+    ephemeral: true,
+  };
+}
+
+// Entry: combat:pick:<callId>
+export async function handleCombatPickButton(interaction) {
+  const callId = parseInt(interaction.customId.split(':')[2], 10);
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call) return interaction.reply({ content: 'Call not found.', ephemeral: true });
+  if (call.author_id !== interaction.user.id) {
+    return interaction.reply({ content: '❌ Only the call author can change the deadline.', ephemeral: true });
+  }
+  await interaction.reply(buildPickerPayload(callId, pickStateFromDeadline(call.deadline)));
+}
+
+// Selects: combat:pick:<callId>:<part>:<otherA>:<otherB>
+export async function handleCombatPickSelect(interaction) {
+  const parts = interaction.customId.split(':');
+  const callId = parseInt(parts[2], 10);
+  const part = parts[3];
+  const a = parseInt(parts[4], 10);
+  const b = parseInt(parts[5], 10);
+  const picked = parseInt(interaction.values[0], 10);
+
+  let state;
+  if (part === 'date')      state = { dayOffset: picked, hour: a,      minute: b };
+  else if (part === 'hour') state = { dayOffset: a,      hour: picked, minute: b };
+  else                      state = { dayOffset: a,      hour: b,      minute: picked };
+
+  await interaction.update(buildPickerPayload(callId, state));
+}
+
+// Continue button: combat:pick:<callId>:next:<d>:<h>:<m> → opens seconds modal
+export async function handleCombatPickContinueButton(interaction) {
+  const parts = interaction.customId.split(':');
+  const callId = parseInt(parts[2], 10);
+  const dayOffset = parseInt(parts[4], 10);
+  const hour = parseInt(parts[5], 10);
+  const minute = parseInt(parts[6], 10);
+
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call) return interaction.reply({ content: 'Call not found.', ephemeral: true });
+  if (call.author_id !== interaction.user.id) {
+    return interaction.reply({ content: '❌ Only the call author can change the deadline.', ephemeral: true });
+  }
+
+  const preFillSec = call.deadline ? new Date(call.deadline * 1000).getUTCSeconds() : 0;
+
+  const modal = new ModalBuilder()
+    .setCustomId(`combat:pick_submit:${callId}:${dayOffset}:${hour}:${minute}`)
+    .setTitle('Set seconds');
+
+  const secondsInput = new TextInputBuilder()
+    .setCustomId('seconds')
+    .setLabel('Seconds (0-59)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setValue(String(preFillSec))
+    .setMaxLength(2);
+
+  modal.addComponents(new ActionRowBuilder().addComponents(secondsInput));
+  await interaction.showModal(modal);
+}
+
+// Modal submit: combat:pick_submit:<callId>:<d>:<h>:<m>
+export async function handleCombatPickModal(interaction) {
+  const parts = interaction.customId.split(':');
+  const callId = parseInt(parts[2], 10);
+  const dayOffset = parseInt(parts[3], 10);
+  const hour = parseInt(parts[4], 10);
+  const minute = parseInt(parts[5], 10);
+
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call) return interaction.reply({ content: 'Call not found.', ephemeral: true });
+  if (call.author_id !== interaction.user.id) {
+    return interaction.reply({ content: '❌ Only the call author can change the deadline.', ephemeral: true });
+  }
+
+  const secondsStr = interaction.fields.getTextInputValue('seconds').trim();
+  const seconds = parseInt(secondsStr, 10);
+  if (!Number.isInteger(seconds) || seconds < 0 || seconds > 59) {
+    return interaction.reply({
+      content: `❌ Seconds must be a whole number between 0 and 59. Got \`${secondsStr}\`.`,
+      ephemeral: true,
+    });
+  }
+
+  const newDeadline = pickUnixForState(dayOffset, hour, minute, seconds);
+  prepare('UPDATE calls SET deadline = ? WHERE id = ?').run(newDeadline, callId);
+
+  const { refreshCall } = await import('./calls.js');
+  await refreshCall(interaction.client, callId);
+
+  await interaction.reply({
+    content: `✅ Deadline set to ${discordTimestamp(newDeadline, 'D')} ${discordTimestamp(newDeadline, 'T')} (${discordTimestamp(newDeadline, 'R')})`,
+    ephemeral: true,
   });
 }
 
