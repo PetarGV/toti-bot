@@ -75,6 +75,7 @@ Request scouting and lookup village info from cached map data.
 |---|---|---|
 | `/scout` | `coords` `[notes]` | Request a scout |
 | `/whois` | `coords` | Lookup village owner / alliance / population |
+| `/nearby` | `coords` `[radius]` `[limit]` | Show nearby villages from cached map data |
 
 ### Panel buttons (Intel panel)
 | Button | Action |
@@ -131,6 +132,9 @@ Personal dashboard, active-call browser, leaderboards.
 | 📊 My Status | Same as `/status` |
 | 📋 Active Calls | Same as `/calls` |
 | ⚙️ My Profile | Same as `/profile` |
+| 🗺️ Nearby Map | Open a modal to search villages near coordinates |
+
+**Nearby Map:** defaults to 10 fields and 10 results. Radius is clamped to 1-50 fields, and limit is clamped to 1-20 results.
 
 ### Pagination
 | Button | Action |

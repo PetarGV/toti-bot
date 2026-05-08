@@ -8,7 +8,7 @@ Discord bot for Travian T4.6 alliance coordination. Pinned button panels for res
 - **Resource push** — pledge tracking, progress bars, auto-fill on delivery
 - **Combat calls** — defense, offense, reinforce, urgent (`@def-crew` ping), responder tally, auto-expiry on arrival
 - **Scout requests** — inline reports visible to channel
-- **map.sql integration** — daily fetch, `/whois <coords>` lookup with player / alliance / population / tribe
+- **map.sql integration** - daily fetch, `/whois <coords>` lookup, and nearby village intel from cached map data
 - **User profiles** — IGN, home coords, tribe, opt-in DM notifications, auto-fill in modals
 - **Status & leaderboards** — personal dashboard, top pushers / defenders / scouts
 - **Personal timer** — recurring channel-mention reminder (auto-deletes after 30s)
@@ -49,7 +49,7 @@ docker compose up -d --build
 ## Slash commands
 
 - **Calls:** `/push`, `/defense`, `/offense`, `/reinforce`, `/scout`
-- **Lookup:** `/whois`, `/calls`, `/status`, `/leaderboard`
+- **Lookup:** `/whois`, `/nearby`, `/calls`, `/status`, `/leaderboard`
 - **Personal:** `/profile`, `/timer set|stop|status`
 - **Admin:** `/setup`, `/admin set-server|reset-round|fetch-map|map-status|diag|tail-log|db-vacuum|backup-now`
 
