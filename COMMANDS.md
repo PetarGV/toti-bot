@@ -172,7 +172,7 @@ All admin commands require Administrator permission.
 | `/setup offense` | — | Post + pin the **Offense** panel (Offense Call, Whois) |
 | `/setup scout` | — | Post + pin the **Scout** panel (Scout Request, Whois, Report) |
 | `/setup resources` | — | Post + pin the **Resources** panel (push buttons) |
-| `/setup general` | — | Post + pin the **General** panel (Status, Calls, Profile) |
+| `/setup general` | — | Post + pin the **General** panel (Status, Calls, Profile, Nearby Map) |
 
 ### Configuration
 | Command | Args | Description |
