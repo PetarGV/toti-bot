@@ -19,7 +19,9 @@ function todayKey() {
 }
 
 function openStream(prefix) {
-  return createWriteStream(join(LOG_DIR, `${prefix}.log`), { flags: 'a' });
+  const stream = createWriteStream(join(LOG_DIR, `${prefix}.log`), { flags: 'a' });
+  stream.on('error', () => {});
+  return stream;
 }
 
 function rotateIfNeeded() {
