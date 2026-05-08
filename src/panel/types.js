@@ -97,6 +97,7 @@ const rowBuilders = {
       btn('panel:status', 'My Status',    '📊'),
       btn('panel:calls',  'Active Calls', '📋'),
       btn('panel:profile','My Profile',   '⚙️'),
+      btn('general:nearby', 'Nearby Map', '🗺️'),
     ),
   ],
 };

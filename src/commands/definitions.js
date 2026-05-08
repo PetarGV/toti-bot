@@ -95,6 +95,25 @@ export const commandDefinitions = [
     .addStringOption(o => o.setName('coords').setDescription('Village coords').setRequired(true)),
 
   new SlashCommandBuilder()
+    .setName('nearby')
+    .setDescription('Find villages near coordinates from map data')
+    .addStringOption(o => o.setName('coords').setDescription('Center coords').setRequired(true))
+    .addIntegerOption(o =>
+      o.setName('radius')
+        .setDescription('Search radius in fields, 1-50')
+        .setMinValue(1)
+        .setMaxValue(50)
+        .setRequired(false)
+    )
+    .addIntegerOption(o =>
+      o.setName('limit')
+        .setDescription('Max nearby villages, 1-20')
+        .setMinValue(1)
+        .setMaxValue(20)
+        .setRequired(false)
+    ),
+
+  new SlashCommandBuilder()
     .setName('status')
     .setDescription('Show your profile and active calls'),
 
