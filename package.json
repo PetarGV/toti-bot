@@ -8,7 +8,8 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "dev:setup": "node scripts/dev-setup.js",
-    "deploy-commands": "node src/commands/deploy.js"
+    "deploy-commands": "node src/commands/deploy.js",
+    "test": "node --test"
   },
   "dependencies": {
     "sql.js": "^1.12.0",

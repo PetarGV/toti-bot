@@ -1,5 +1,6 @@
 import { handleSetup, handleAdmin } from '../commands/admin.js';
 import { handleWhoisCommand, handleWhoisButton, handleWhoisModalSubmit } from './whois.js';
+import { handleNearbyCommand, handleNearbyButton, handleNearbyModalSubmit } from './nearby.js';
 import {
   handlePushButton, handlePushCommand, handlePushCreateModal,
   handlePledgeAddButton, handlePledgeWithdrawButton, handlePledgeCloseButton,
@@ -69,6 +70,7 @@ export async function routeCommand(interaction) {
       case 'setup':     return await handleSetup(interaction);
       case 'admin':     return await handleAdmin(interaction);
       case 'whois':     return await handleWhoisCommand(interaction);
+      case 'nearby':    return await handleNearbyCommand(interaction);
       case 'push':      return await handlePushCommand(interaction);
       case 'defense':   return await handleDefenseCommand(interaction);
       case 'offense':   return await handleOffenseCommand(interaction);
@@ -105,6 +107,7 @@ export async function routeButton(interaction) {
 
     // Specific single-id buttons first
     if (id === 'intel:whois') return await handleWhoisButton(interaction);
+    if (id === 'general:nearby') return await handleNearbyButton(interaction);
 
     if (ns === 'push') {
       return await handlePushButton(interaction);
@@ -175,6 +178,7 @@ export async function routeModal(interaction) {
   const id = interaction.customId;
   try {
     if (id === 'whois:lookup')                  return await handleWhoisModalSubmit(interaction);
+    if (id === 'nearby:lookup')                 return await handleNearbyModalSubmit(interaction);
     if (id.startsWith('push:create:'))          return await handlePushCreateModal(interaction);
     if (id.startsWith('pledge:submit:'))        return await handlePledgeSubmitModal(interaction);
     if (id.startsWith('combat:create:'))        return await handleCombatCreateModal(interaction);
