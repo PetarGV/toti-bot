@@ -12,6 +12,7 @@ function clamp(value, min, max) {
 }
 
 function integerOrFallback(value, fallback) {
+  if (value == null || value === '') return fallback;
   const n = Number(value);
   if (!Number.isFinite(n)) return fallback;
   return Math.trunc(n);

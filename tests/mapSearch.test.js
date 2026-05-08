@@ -16,6 +16,7 @@ const sampleRows = [
 
 test('normalizeNearbyOptions applies defaults and clamps bounds', () => {
   assert.deepEqual(normalizeNearbyOptions(), { radius: 10, limit: 10 });
+  assert.deepEqual(normalizeNearbyOptions({ radius: null, limit: null }), { radius: 10, limit: 10 });
   assert.deepEqual(normalizeNearbyOptions({ radius: 0, limit: 0 }), { radius: 1, limit: 1 });
   assert.deepEqual(normalizeNearbyOptions({ radius: 99, limit: 99 }), { radius: 50, limit: 20 });
   assert.deepEqual(normalizeNearbyOptions({ radius: '12', limit: '7' }), { radius: 12, limit: 7 });
