@@ -1,7 +1,10 @@
 import { PermissionFlagsBits } from 'discord.js';
 import {
+  ROLE_BUTTON_PREFIX,
   ROLE_SELECT_CUSTOM_ID,
+  buildRoleResetPlan,
   buildRoleUpdatePlan,
+  getRoleValueFromButtonId,
 } from '../utils/roleSelection.js';
 
 function normalizeRoleName(name) {
@@ -40,11 +43,7 @@ function getUnmanageableRoles(botMember, roles) {
   );
 }
 
-export async function handleRoleSelect(interaction) {
-  if (interaction.customId !== ROLE_SELECT_CUSTOM_ID) {
-    return interaction.reply({ content: 'Unknown role selector.', ephemeral: true });
-  }
-
+async function applyRolePlan(interaction, makePlan, reason) {
   if (!interaction.inGuild()) {
     return interaction.reply({ content: 'Role selection only works inside a Discord server.', ephemeral: true });
   }
@@ -57,11 +56,10 @@ export async function handleRoleSelect(interaction) {
   let plan;
 
   try {
-    plan = buildRoleUpdatePlan(interaction.values?.[0], memberRoleNames, guildRoleNames);
+    plan = makePlan(memberRoleNames, guildRoleNames);
   } catch {
-    return interaction.editReply({ content: 'Unknown role selection. Please try the menu again.' });
+    return interaction.editReply({ content: 'Unknown role selection. Please try again.' });
   }
-
   if (plan.missingRoleNames.length > 0) {
     return interaction.editReply({
       content: `I could not find these Discord roles: ${formatRoleList(plan.missingRoleNames)}. Create them with those exact names, then try again.`,
@@ -85,12 +83,47 @@ export async function handleRoleSelect(interaction) {
     });
   }
 
-  const reason = `Crew role selected by ${interaction.user.tag}`;
   if (rolesToRemove.length > 0) await member.roles.remove(rolesToRemove, reason);
   if (rolesToAdd.length > 0) await member.roles.add(rolesToAdd, reason);
+
+  if (!plan.selection) {
+    return interaction.editReply({
+      content: rolesToRemove.length > 0
+        ? `Done. Removed crew roles: ${formatRoleList(plan.removeRoleNames)}.`
+        : 'Done. You had no crew roles to remove.',
+    });
+  }
 
   const roleList = formatRoleList(plan.selection.roleNames);
   return interaction.editReply({
     content: `Done. You now have ${roleList}.`,
   });
+}
+
+export async function handleRoleSelect(interaction) {
+  if (interaction.customId !== ROLE_SELECT_CUSTOM_ID) {
+    return interaction.reply({ content: 'Unknown role selector.', ephemeral: true });
+  }
+
+  return applyRolePlan(
+    interaction,
+    (memberRoleNames, guildRoleNames) => buildRoleUpdatePlan(interaction.values?.[0], memberRoleNames, guildRoleNames),
+    `Crew role selected by ${interaction.user.tag}`,
+  );
+}
+
+export async function handleRoleButton(interaction) {
+  if (!interaction.customId?.startsWith(`${ROLE_BUTTON_PREFIX}:`)) {
+    return interaction.reply({ content: 'Unknown role button.', ephemeral: true });
+  }
+
+  const value = getRoleValueFromButtonId(interaction.customId);
+
+  return applyRolePlan(
+    interaction,
+    (memberRoleNames, guildRoleNames) => value === 'reset'
+      ? buildRoleResetPlan(memberRoleNames)
+      : buildRoleUpdatePlan(value, memberRoleNames, guildRoleNames),
+    `Crew role button used by ${interaction.user.tag}`,
+  );
 }
