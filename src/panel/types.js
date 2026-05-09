@@ -1,8 +1,7 @@
 import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
-  StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
 } from 'discord.js';
-import { ROLE_SELECTIONS, ROLE_SELECT_CUSTOM_ID } from '../utils/roleSelection.js';
+import { ROLE_BUTTON_PREFIX, ROLE_RESET_CUSTOM_ID, ROLE_SELECTIONS } from '../utils/roleSelection.js';
 
 export const PANEL_TYPES = ['defense', 'offense', 'resources', 'scout', 'general', 'roles'];
 
@@ -16,21 +15,13 @@ const COLOR = {
 };
 
 function btn(customId, label, emoji, style = ButtonStyle.Secondary) {
-  return new ButtonBuilder().setCustomId(customId).setLabel(label).setEmoji(emoji).setStyle(style);
+  const button = new ButtonBuilder().setCustomId(customId).setLabel(label).setStyle(style);
+  if (emoji) button.setEmoji(emoji);
+  return button;
 }
 
-function rolesSelect() {
-  return new StringSelectMenuBuilder()
-    .setCustomId(ROLE_SELECT_CUSTOM_ID)
-    .setPlaceholder('Choose your crew role')
-    .addOptions(
-      ROLE_SELECTIONS.map((selection) =>
-        new StringSelectMenuOptionBuilder()
-          .setLabel(selection.label)
-          .setValue(selection.value)
-          .setDescription(selection.description),
-      ),
-    );
+function roleButton(selection) {
+  return btn(`${ROLE_BUTTON_PREFIX}:${selection.value}`, selection.label, null, ButtonStyle.Primary);
 }
 
 export function buildPanel(type) {
@@ -60,7 +51,7 @@ const descriptions = {
   resources: 'Request resource pushes from alliance members. Select the resource type to get started.',
   scout:     'Request scouts, look up villages, or report enemy sightings.',
   general:   'View active calls, check your profile, and manage your settings.',
-  roles:     'Pick the crew role that matches how you play. Hybrid also grants Def Crew.',
+  roles:     'Pick the crew role that matches how you play. Hybrid also grants Def Crew. Use reset to remove all crew roles.',
 };
 
 const footers = {
@@ -121,6 +112,11 @@ const rowBuilders = {
   ],
 
   roles: () => [
-    new ActionRowBuilder().addComponents(rolesSelect()),
+    new ActionRowBuilder().addComponents(
+      ...ROLE_SELECTIONS.map((selection) => roleButton(selection)),
+    ),
+    new ActionRowBuilder().addComponents(
+      btn(ROLE_RESET_CUSTOM_ID, 'Reset Crew Roles', null, ButtonStyle.Danger),
+    ),
   ],
 };

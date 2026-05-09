@@ -46,8 +46,8 @@ import {
 import { handleLeaderboardCommand } from './leaderboard.js';
 import { handleTimerCommand } from './timer.js';
 import { handleHelpCommand, handleHelpSelect } from './help.js';
-import { handleRoleSelect } from './roles.js';
-import { ROLE_SELECT_CUSTOM_ID } from '../utils/roleSelection.js';
+import { handleRoleButton, handleRoleSelect } from './roles.js';
+import { ROLE_BUTTON_PREFIX, ROLE_SELECT_CUSTOM_ID } from '../utils/roleSelection.js';
 import { logger } from '../utils/logger.js';
 
 async function notImplemented(interaction) {
@@ -106,6 +106,7 @@ export async function routeButton(interaction) {
     if (id === 'profile:edit-coords') return await handleEditCoordsButton(interaction);
     if (id === 'notify:toggle')       return await handleNotifyToggle(interaction);
     if (id.startsWith('calls:page:')) return await handleCallsPage(interaction);
+    if (id.startsWith(`${ROLE_BUTTON_PREFIX}:`)) return await handleRoleButton(interaction);
 
     // Specific single-id buttons first
     if (id === 'intel:whois') return await handleWhoisButton(interaction);

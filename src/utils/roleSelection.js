@@ -1,4 +1,6 @@
 export const ROLE_SELECT_CUSTOM_ID = 'setup:roles';
+export const ROLE_BUTTON_PREFIX = 'setup:roles';
+export const ROLE_RESET_CUSTOM_ID = `${ROLE_BUTTON_PREFIX}:reset`;
 
 export const ROLE_SELECTIONS = [
   {
@@ -24,6 +26,12 @@ export const ROLE_SELECTIONS = [
     label: 'Scout Crew',
     description: 'Scouting and intel coordination.',
     roleNames: ['Scout Crew'],
+  },
+  {
+    value: 'wwk',
+    label: 'WWK',
+    description: 'World Wonder killer coordination.',
+    roleNames: ['WWK'],
   },
 ];
 
@@ -68,5 +76,25 @@ export function buildRoleUpdatePlan(selectedValue, memberRoleNames = [], guildRo
     addRoleNames,
     removeRoleNames,
     missingRoleNames,
+  };
+}
+
+export function getRoleValueFromButtonId(customId) {
+  if (!customId?.startsWith(`${ROLE_BUTTON_PREFIX}:`)) return null;
+  const value = customId.slice(ROLE_BUTTON_PREFIX.length + 1);
+  if (value === 'reset') return value;
+  return getRoleSelection(value) ? value : null;
+}
+
+export function buildRoleResetPlan(memberRoleNames = []) {
+  const removeRoleNames = CREW_ROLE_NAMES.filter((roleName) =>
+    hasRoleName(memberRoleNames, roleName)
+  );
+
+  return {
+    selection: null,
+    addRoleNames: [],
+    removeRoleNames,
+    missingRoleNames: [],
   };
 }
