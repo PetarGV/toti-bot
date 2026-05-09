@@ -1,8 +1,10 @@
 import {
-  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
+  StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
 } from 'discord.js';
+import { ROLE_SELECTIONS, ROLE_SELECT_CUSTOM_ID } from '../utils/roleSelection.js';
 
-export const PANEL_TYPES = ['defense', 'offense', 'resources', 'scout', 'general'];
+export const PANEL_TYPES = ['defense', 'offense', 'resources', 'scout', 'general', 'roles'];
 
 const COLOR = {
   defense:   0xe74c3c,
@@ -10,14 +12,25 @@ const COLOR = {
   resources: 0x2ecc71,
   scout:     0x3498db,
   general:   0x9b59b6,
+  roles:     0xf1c40f,
 };
 
 function btn(customId, label, emoji, style = ButtonStyle.Secondary) {
   return new ButtonBuilder().setCustomId(customId).setLabel(label).setEmoji(emoji).setStyle(style);
 }
 
-function linkBtn(label, emoji, url) {
-  return new ButtonBuilder().setLabel(label).setEmoji(emoji).setStyle(ButtonStyle.Link).setURL(url);
+function rolesSelect() {
+  return new StringSelectMenuBuilder()
+    .setCustomId(ROLE_SELECT_CUSTOM_ID)
+    .setPlaceholder('Choose your crew role')
+    .addOptions(
+      ROLE_SELECTIONS.map((selection) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(selection.label)
+          .setValue(selection.value)
+          .setDescription(selection.description),
+      ),
+    );
 }
 
 export function buildPanel(type) {
@@ -25,7 +38,7 @@ export function buildPanel(type) {
     .setColor(COLOR[type] ?? 0x95a5a6)
     .setTitle(titles[type])
     .setDescription(descriptions[type])
-    .setFooter({ text: 'Click a button to open a request form' })
+    .setFooter({ text: footers[type] ?? 'Click a button to open a request form' })
     .setTimestamp();
 
   const rows = rowBuilders[type]();
@@ -38,6 +51,7 @@ const titles = {
   resources: '📦 Resource Push',
   scout:     '🔍 Scouting & Intel',
   general:   '📊 Status & Overview',
+  roles:     'Choose Your Crew Role',
 };
 
 const descriptions = {
@@ -46,6 +60,11 @@ const descriptions = {
   resources: 'Request resource pushes from alliance members. Select the resource type to get started.',
   scout:     'Request scouts, look up villages, or report enemy sightings.',
   general:   'View active calls, check your profile, and manage your settings.',
+  roles:     'Pick the crew role that matches how you play. Hybrid also grants Def Crew.',
+};
+
+const footers = {
+  roles: 'You can change your selection later from this menu.',
 };
 
 const rowBuilders = {
@@ -99,5 +118,9 @@ const rowBuilders = {
       btn('panel:profile','My Profile',   '⚙️'),
       btn('general:nearby', 'Nearby Map', '🗺️'),
     ),
+  ],
+
+  roles: () => [
+    new ActionRowBuilder().addComponents(rolesSelect()),
   ],
 };

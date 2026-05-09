@@ -46,6 +46,8 @@ import {
 import { handleLeaderboardCommand } from './leaderboard.js';
 import { handleTimerCommand } from './timer.js';
 import { handleHelpCommand, handleHelpSelect } from './help.js';
+import { handleRoleSelect } from './roles.js';
+import { ROLE_SELECT_CUSTOM_ID } from '../utils/roleSelection.js';
 import { logger } from '../utils/logger.js';
 
 async function notImplemented(interaction) {
@@ -165,6 +167,7 @@ export async function routeSelect(interaction) {
   try {
     if (id === 'profile:tribe-select')   return await handleTribeSelect(interaction);
     if (id === 'help:category')          return await handleHelpSelect(interaction);
+    if (id === ROLE_SELECT_CUSTOM_ID)    return await handleRoleSelect(interaction);
     if (id.startsWith('combat:pick:'))   return await handleCombatPickSelect(interaction);
     return await interaction.reply({ content: 'Unknown selection.', ephemeral: true });
   } catch (err) {

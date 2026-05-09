@@ -10,7 +10,8 @@ export const commandDefinitions = [
     .addSubcommand(s => s.setName('offense').setDescription('Offense operations panel'))
     .addSubcommand(s => s.setName('scout').setDescription('Scouting & intel panel'))
     .addSubcommand(s => s.setName('resources').setDescription('Resource push panel'))
-    .addSubcommand(s => s.setName('general').setDescription('Status & overview panel')),
+    .addSubcommand(s => s.setName('general').setDescription('Status & overview panel'))
+    .addSubcommand(s => s.setName('roles').setDescription('Crew role selection panel')),
 
   new SlashCommandBuilder()
     .setName('admin')
