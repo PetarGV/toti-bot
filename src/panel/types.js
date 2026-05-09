@@ -11,7 +11,7 @@ const COLOR = {
   resources: 0x2ecc71,
   scout:     0x3498db,
   general:   0x9b59b6,
-  roles:     0xf1c40f,
+  roles:     0x5865f2,
 };
 
 function btn(customId, label, emoji, style = ButtonStyle.Secondary) {
@@ -20,8 +20,32 @@ function btn(customId, label, emoji, style = ButtonStyle.Secondary) {
   return button;
 }
 
+const ROLE_BUTTON_META = {
+  def:    { emoji: '🟢', style: ButtonStyle.Success },
+  off:    { emoji: '🔴', style: ButtonStyle.Danger },
+  scout:  { emoji: '🔵', style: ButtonStyle.Primary },
+  hybrid: { emoji: '🟠', style: ButtonStyle.Secondary },
+  wwk:    { emoji: '⚫', style: ButtonStyle.Secondary },
+};
+
+function getRoleSelection(value) {
+  return ROLE_SELECTIONS.find((selection) => selection.value === value);
+}
+
 function roleButton(selection) {
-  return btn(`${ROLE_BUTTON_PREFIX}:${selection.value}`, selection.label, null, ButtonStyle.Primary);
+  const meta = ROLE_BUTTON_META[selection.value] ?? {};
+  return btn(
+    `${ROLE_BUTTON_PREFIX}:${selection.value}`,
+    selection.label,
+    meta.emoji,
+    meta.style ?? ButtonStyle.Secondary,
+  );
+}
+
+function roleButtonRow(values) {
+  return new ActionRowBuilder().addComponents(
+    ...values.map((value) => roleButton(getRoleSelection(value))),
+  );
 }
 
 export function buildPanel(type) {
@@ -51,7 +75,12 @@ const descriptions = {
   resources: 'Request resource pushes from alliance members. Select the resource type to get started.',
   scout:     'Request scouts, look up villages, or report enemy sightings.',
   general:   'View active calls, check your profile, and manage your settings.',
-  roles:     'Pick the crew role that matches how you play. Hybrid also grants Def Crew. Use reset to remove all crew roles.',
+  roles:     [
+    'Select the assignment that matches how you play.',
+    '🟢 Def Crew   🔴 Off Crew   🔵 Scout Crew',
+    '🟠 Hybrid gives Def Crew too. ⚫ WWK is separate.',
+    'Reset removes every crew role.',
+  ].join('\n'),
 };
 
 const footers = {
@@ -112,11 +141,10 @@ const rowBuilders = {
   ],
 
   roles: () => [
+    roleButtonRow(['def', 'off', 'scout']),
+    roleButtonRow(['hybrid', 'wwk']),
     new ActionRowBuilder().addComponents(
-      ...ROLE_SELECTIONS.map((selection) => roleButton(selection)),
-    ),
-    new ActionRowBuilder().addComponents(
-      btn(ROLE_RESET_CUSTOM_ID, 'Reset Crew Roles', null, ButtonStyle.Danger),
+      btn(ROLE_RESET_CUSTOM_ID, 'Reset Crew Roles', '♻️', ButtonStyle.Danger),
     ),
   ],
 };
