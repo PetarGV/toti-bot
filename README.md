@@ -9,6 +9,7 @@ Discord bot for Travian T4.6 alliance coordination. Pinned button panels for res
 - **Combat calls** — defense, offense, reinforce, urgent (`@def-crew` ping), responder tally, auto-expiry on arrival
 - **Scout requests** — inline reports visible to channel
 - **map.sql integration** - daily fetch, `/whois <coords>` lookup, and nearby village intel from cached map data
+- **Discord/member map sync** - admin scan matches Discord display names to Travian players while ignoring case and symbols
 - **User profiles** — IGN, home coords, tribe, opt-in DM notifications, auto-fill in modals
 - **Status & leaderboards** — personal dashboard, top pushers / defenders / scouts
 - **Personal timer** — recurring channel-mention reminder (auto-deletes after 30s)
@@ -39,19 +40,20 @@ docker compose up -d --build
 
 1. Create the bot at https://discord.com/developers/applications
 2. **OAuth2 → URL Generator**: scopes `bot` + `applications.commands`, permissions: Send Messages, Manage Messages, Embed Links, Mention Everyone, Read Message History
-3. Invite the bot using that URL
-4. Fill `.env` with `DISCORD_TOKEN`, `CLIENT_ID` (Application ID), `GUILD_ID`
-5. `npm install && npm run deploy-commands`
-6. `npm start` (or `docker compose up -d`)
-7. In each channel, run `/setup <defense|offense|scout|resources|general>` to post a pinned panel
-8. (Optional) Create a role named `def-crew` so combat calls can ping defenders
+3. Enable the **Server Members Intent** in the bot settings; `/admin sync-members` needs full member fetch access
+4. Invite the bot using that URL
+5. Fill `.env` with `DISCORD_TOKEN`, `CLIENT_ID` (Application ID), `GUILD_ID`
+6. `npm install && npm run deploy-commands`
+7. `npm start` (or `docker compose up -d`)
+8. In each channel, run `/setup <defense|offense|scout|resources|general>` to post a pinned panel
+9. (Optional) Create a role named `def-crew` so combat calls can ping defenders
 
 ## Slash commands
 
 - **Calls:** `/push`, `/defense`, `/offense`, `/reinforce`, `/scout`
 - **Lookup:** `/whois`, `/nearby`, `/calls`, `/status`, `/leaderboard`
 - **Personal:** `/profile`, `/timer set|stop|status`
-- **Admin:** `/setup`, `/admin set-server|reset-round|fetch-map|map-status|diag|tail-log|db-vacuum|backup-now`
+- **Admin:** `/setup`, `/admin set-server|reset-round|fetch-map|map-status|sync-members|diag|tail-log|db-vacuum|backup-now`
 
 See [OPS.md](OPS.md) for the admin cheatsheet, [DEPLOY.md](DEPLOY.md) for VPS deployment.
 

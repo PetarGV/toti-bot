@@ -184,6 +184,9 @@ All admin commands require Administrator permission.
 |---|---|
 | `/admin fetch-map` | Manually trigger `map.sql` fetch |
 | `/admin map-status` | Last fetch time, total villages, top 5 alliances |
+| `/admin sync-members [update-profiles]` | Scan Discord members against Travian player names; fills missing IGN profiles by default |
+
+**Member sync matching:** Discord display names and Travian player names are normalized before comparison: lowercase, accents removed, and symbols/spaces/punctuation stripped. A Travian name must be included inside the Discord display name. If multiple equal-length player names match one member, the result is reported as ambiguous and no profile is updated.
 
 ### Round / data management
 | Command | Description |

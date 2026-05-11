@@ -10,11 +10,77 @@ import { discordTimestamp } from '../utils/time.js';
 import { snapshot } from '../utils/metrics.js';
 import { COLORS, FOOTER } from '../utils/i18n.js';
 import { logger } from '../utils/logger.js';
+import {
+  buildMemberMapAudit,
+  getTravianPlayersFromMap,
+  normalizeNameForMatch,
+} from '../utils/memberMapMonitor.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH  = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
 const LOG_DIR  = process.env.LOG_DIR || join(__dirname, '../../data/logs');
 const SECRET_RE = /(token|password|secret|api[_-]?key)/i;
+const MEMBER_SYNC_PREVIEW_LIMIT = 8;
+
+function firstLines(lines, limit = MEMBER_SYNC_PREVIEW_LIMIT) {
+  if (lines.length === 0) return '*None*';
+  const shown = lines.slice(0, limit);
+  const suffix = lines.length > limit ? `\n...and ${lines.length - limit} more` : '';
+  return `${shown.join('\n')}${suffix}`;
+}
+
+function profileLinkLine(row) {
+  const villages = Number(row.player.villages ?? 0).toLocaleString();
+  const population = Number(row.player.population ?? 0).toLocaleString();
+  return `<@${row.member.id}> -> **${row.player.player}** (${villages} villages, ${population} pop)`;
+}
+
+function ambiguousLine(row) {
+  const names = row.players.map(player => player.player).join(' / ');
+  return `**${row.displayName || row.member.id}** -> ${names}`;
+}
+
+function conflictLine(row) {
+  return `<@${row.member.id}> has profile **${row.existingIgn}**, matched **${row.player.player}**`;
+}
+
+function applyMemberMapProfileMatches(audit) {
+  const profiles = new Map(
+    prepare('SELECT discord_id, ign FROM users').all()
+      .map(row => [row.discord_id, row.ign]),
+  );
+
+  const upsert = prepare(`
+    INSERT INTO users (discord_id, ign)
+    VALUES (?, ?)
+    ON CONFLICT(discord_id) DO UPDATE SET
+      ign = excluded.ign
+    WHERE users.ign IS NULL OR users.ign = ''
+  `);
+
+  const updated = [];
+  const alreadyLinked = [];
+  const conflicts = [];
+
+  for (const row of audit.matched) {
+    const existingIgn = profiles.get(row.member.id) ?? null;
+    const normalizedExisting = normalizeNameForMatch(existingIgn);
+
+    if (normalizedExisting) {
+      if (normalizedExisting === row.player.normalizedName) {
+        alreadyLinked.push(row);
+      } else {
+        conflicts.push({ ...row, existingIgn });
+      }
+      continue;
+    }
+
+    upsert.run(row.member.id, row.player.player);
+    updated.push(row);
+  }
+
+  return { updated, alreadyLinked, conflicts };
+}
 
 export async function handleSetup(interaction) {
   const type = interaction.options.getSubcommand();
@@ -90,6 +156,95 @@ export async function handleAdmin(interaction) {
       );
 
     return interaction.reply({ embeds: [embed], ephemeral: true });
+  }
+
+  if (sub === 'sync-members') {
+    await interaction.deferReply({ ephemeral: true });
+
+    if (!interaction.guild) {
+      return interaction.editReply({ content: 'This command only works inside a Discord server.' });
+    }
+
+    const players = getTravianPlayersFromMap();
+    if (players.length === 0) {
+      return interaction.editReply({ content: 'No Travian map players loaded yet. Run `/admin fetch-map` first.' });
+    }
+
+    let memberCollection;
+    try {
+      memberCollection = await interaction.guild.members.fetch();
+    } catch (err) {
+      logger.error('Member sync failed to fetch guild members:', err);
+      return interaction.editReply({
+        content: 'Could not fetch Discord members. Enable the bot Server Members Intent in the Discord Developer Portal, then restart the bot.',
+      });
+    }
+
+    const members = Array.from(memberCollection.values())
+      .filter(member => !member.user?.bot);
+    const audit = buildMemberMapAudit(members, players);
+    const updateProfiles = interaction.options.getBoolean('update-profiles') ?? true;
+    const profileSync = updateProfiles
+      ? applyMemberMapProfileMatches(audit)
+      : { updated: [], alreadyLinked: [], conflicts: [] };
+
+    const embed = new EmbedBuilder()
+      .setColor(COLORS.brand.info)
+      .setTitle('Discord Member Map Sync')
+      .setDescription(
+        updateProfiles
+          ? 'Matched Discord display names against Travian player names and filled missing bot profiles for unique matches.'
+          : 'Matched Discord display names against Travian player names without updating bot profiles.',
+      )
+      .addFields(
+        { name: 'Discord Members', value: String(audit.totalMembers), inline: true },
+        { name: 'Travian Players',  value: String(audit.totalPlayers), inline: true },
+        { name: 'Unique Matches',   value: String(audit.matched.length), inline: true },
+        { name: 'Profiles Updated', value: String(profileSync.updated.length), inline: true },
+        { name: 'Already Linked',   value: String(profileSync.alreadyLinked.length), inline: true },
+        { name: 'Profile Conflicts', value: String(profileSync.conflicts.length), inline: true },
+        { name: 'Ambiguous',        value: String(audit.ambiguous.length), inline: true },
+        { name: 'Unmatched',        value: String(audit.unmatched.length), inline: true },
+      )
+      .setFooter({ text: 'Matching ignores case, spaces, punctuation, symbols, and accents.' })
+      .setTimestamp();
+
+    if (profileSync.updated.length) {
+      embed.addFields({
+        name: 'Updated Profiles',
+        value: firstLines(profileSync.updated.map(profileLinkLine)),
+        inline: false,
+      });
+    } else if (!updateProfiles && audit.matched.length) {
+      embed.addFields({
+        name: 'Match Preview',
+        value: firstLines(audit.matched.map(profileLinkLine)),
+        inline: false,
+      });
+    }
+
+    if (profileSync.conflicts.length) {
+      embed.addFields({
+        name: 'Profile Conflicts',
+        value: firstLines(profileSync.conflicts.map(conflictLine)),
+        inline: false,
+      });
+    }
+
+    if (audit.ambiguous.length) {
+      embed.addFields({
+        name: 'Ambiguous Names',
+        value: firstLines(audit.ambiguous.map(ambiguousLine)),
+        inline: false,
+      });
+    }
+
+    logger.info(
+      `Member sync by ${interaction.user.tag}: ${audit.matched.length} matched, ` +
+      `${profileSync.updated.length} updated, ${audit.ambiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
+    );
+
+    return interaction.editReply({ embeds: [embed] });
   }
 
   if (sub === 'diag') {

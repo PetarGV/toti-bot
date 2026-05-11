@@ -33,6 +33,15 @@ export const commandDefinitions = [
         .setDescription('Manually trigger a map.sql fetch')
     )
     .addSubcommand(s => s.setName('map-status').setDescription('Show map data status'))
+    .addSubcommand(s =>
+      s.setName('sync-members')
+        .setDescription('Match Discord member names against Travian map players')
+        .addBooleanOption(o =>
+          o.setName('update-profiles')
+            .setDescription('Fill missing bot profiles from unique matches (default: true)')
+            .setRequired(false)
+        )
+    )
     .addSubcommand(s => s.setName('diag').setDescription('Show bot diagnostics (uptime, memory, DB size)'))
     .addSubcommand(s =>
       s.setName('tail-log')
