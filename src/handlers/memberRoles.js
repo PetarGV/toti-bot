@@ -41,7 +41,9 @@ export async function assignRolesFromIgn({ member, ign }) {
 
   // Alliance roles (Accepted vs Imposter)
   const acceptedAlliance = getConfig('accepted_alliance') ?? 'Invictus';
-  const isAccepted = (village.alliance ?? '') === acceptedAlliance;
+  const villageAlliance = village.alliance ?? '';
+  const isAccepted = villageAlliance.toLowerCase() === acceptedAlliance.toLowerCase();
+  logger.info(`assignRolesFromIgn: ${ign} alliance='${villageAlliance}' expected='${acceptedAlliance}' isAccepted=${isAccepted}`);
   const addRoleName = isAccepted ? ACCEPTED_ROLE : IMPOSTER_ROLE;
   const removeRoleName = isAccepted ? IMPOSTER_ROLE : ACCEPTED_ROLE;
   const addRole = findRole(member, addRoleName);
