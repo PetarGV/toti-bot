@@ -2,6 +2,15 @@ import { handleSetup, handleAdmin } from '../commands/admin.js';
 import { handleWhoisCommand, handleWhoisButton, handleWhoisModalSubmit } from './whois.js';
 import { handleNearbyCommand, handleNearbyButton, handleNearbyModalSubmit } from './nearby.js';
 import {
+  handleOnboardStartButton,
+  handleOnboardAdvanceButton,
+  handleOnboardSkipButton,
+  handleOnboardSetIgnButton,
+  handleOnboardSaveIgnModal,
+  handleOnboardSetCoordsButton,
+  handleOnboardSaveCoordsModal,
+} from './onboarding.js';
+import {
   handlePushButton, handlePushCommand, handlePushCreateModal,
   handlePledgeAddButton, handlePledgeWithdrawButton, handlePledgeCloseButton,
   handlePledgeSubmitModal,
@@ -116,6 +125,11 @@ export async function routeButton(interaction) {
     if (id.startsWith('sync:resolve-conflicts:')) return await handleResolveConflictsButton(interaction);
     if (id.startsWith('sync:resolve-ambig:'))     return await handleResolveAmbigButton(interaction);
     if (id.startsWith('sync:act:'))               return await handleActButton(interaction);
+    if (id.startsWith('onboard:start:'))    return await handleOnboardStartButton(interaction);
+    if (id.startsWith('onboard:advance:'))  return await handleOnboardAdvanceButton(interaction);
+    if (id.startsWith('onboard:skip:'))     return await handleOnboardSkipButton(interaction);
+    if (id === 'onboard:set-ign')           return await handleOnboardSetIgnButton(interaction);
+    if (id === 'onboard:set-coords')        return await handleOnboardSetCoordsButton(interaction);
     if (id.startsWith('calls:page:')) return await handleCallsPage(interaction);
     if (id.startsWith(`${ROLE_BUTTON_PREFIX}:`)) return await handleRoleButton(interaction);
 
@@ -209,6 +223,8 @@ export async function routeModal(interaction) {
     if (id === 'profile:save')                  return await handleProfileModal(interaction);
     if (id === 'profile:save-ign')              return await handleEditIgnModal(interaction);
     if (id === 'profile:save-coords')           return await handleEditCoordsModal(interaction);
+    if (id === 'onboard:save-ign')    return await handleOnboardSaveIgnModal(interaction);
+    if (id === 'onboard:save-coords') return await handleOnboardSaveCoordsModal(interaction);
     return await notImplemented(interaction);
   } catch (err) {
     logger.error('Modal error [%s]:', id, err);

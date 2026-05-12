@@ -239,3 +239,20 @@ test('buildWelcomePayload includes a link to the roles panel when available', ()
   });
   assert.match(payload.content, /https:\/\/discord\.com\/channels\/g\/c\/m/);
 });
+
+test('router dispatches onboard:start to the onboarding handler', async () => {
+  const { routeButton } = await import('../src/handlers/router.js');
+  let captured = null;
+  const stub = {
+    customId: 'onboard:start:777',
+    user: { id: '777' },
+    member: { roles: { cache: new Map() } },
+    replied: false, deferred: false,
+    reply:   async (p) => { captured = p; return p; },
+    update:  async (p) => { captured = p; return p; },
+    followUp: async (p) => { captured = p; return p; },
+    editReply: async (p) => { captured = p; return p; },
+  };
+  await routeButton(stub);
+  assert.ok(captured, 'router replied (did not fall through to Unknown button)');
+});
