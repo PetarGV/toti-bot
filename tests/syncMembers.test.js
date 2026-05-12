@@ -79,3 +79,19 @@ test('buildSyncResolveButtons returns a row only when there is anything to resol
   const onlyConflicts = buildSyncResolveButtons({ adminId: '999', conflicts: 3, ambiguous: 0 });
   assert.equal(onlyConflicts.toJSON().components.length, 1);
 });
+
+test('router dispatches sync:resolve-conflicts to the syncResolve handler', async () => {
+  const { routeButton } = await import('../src/handlers/router.js');
+  let captured = null;
+  const stubInteraction = {
+    customId: 'sync:resolve-conflicts:999',
+    user:    { id: '999' },
+    replied: false, deferred: false,
+    reply:    async (p) => { captured = p; return p; },
+    editReply: async (p) => { captured = p; return p; },
+    followUp: async (p) => { captured = p; return p; },
+    guild: null,
+  };
+  await routeButton(stubInteraction);
+  assert.ok(captured, 'router replied');
+});

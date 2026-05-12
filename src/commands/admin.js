@@ -40,7 +40,7 @@ function profileLinkLine(row) {
 
 function ambiguousLine(row) {
   const names = row.players.map(player => player.player).join(' / ');
-  return `**${row.displayName || row.member.id}** -> ${names}`;
+  return `<@${row.member.id}> **${row.displayName || row.member.id}** -> ${names}`;
 }
 
 function conflictLine(row) {

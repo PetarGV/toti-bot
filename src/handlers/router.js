@@ -49,6 +49,14 @@ import { handleHelpCommand, handleHelpSelect } from './help.js';
 import { handleRoleButton, handleRoleSelect } from './roles.js';
 import { ROLE_BUTTON_PREFIX, ROLE_SELECT_CUSTOM_ID } from '../utils/roleSelection.js';
 import { logger } from '../utils/logger.js';
+import {
+  handleResolveConflictsButton,
+  handleResolveAmbigButton,
+  handleConflictPickSelect,
+  handleAmbigPickSelect,
+  handleAmbigCandidateSelect,
+  handleActButton,
+} from './syncResolve.js';
 
 async function notImplemented(interaction) {
   const id = interaction.customId ?? interaction.commandName;
@@ -105,6 +113,9 @@ export async function routeButton(interaction) {
     if (id === 'profile:edit-ign')    return await handleEditIgnButton(interaction);
     if (id === 'profile:edit-coords') return await handleEditCoordsButton(interaction);
     if (id === 'notify:toggle')       return await handleNotifyToggle(interaction);
+    if (id.startsWith('sync:resolve-conflicts:')) return await handleResolveConflictsButton(interaction);
+    if (id.startsWith('sync:resolve-ambig:'))     return await handleResolveAmbigButton(interaction);
+    if (id.startsWith('sync:act:'))               return await handleActButton(interaction);
     if (id.startsWith('calls:page:')) return await handleCallsPage(interaction);
     if (id.startsWith(`${ROLE_BUTTON_PREFIX}:`)) return await handleRoleButton(interaction);
 
@@ -170,6 +181,9 @@ export async function routeSelect(interaction) {
     if (id === 'help:category')          return await handleHelpSelect(interaction);
     if (id === ROLE_SELECT_CUSTOM_ID)    return await handleRoleSelect(interaction);
     if (id.startsWith('combat:pick:'))   return await handleCombatPickSelect(interaction);
+    if (id.startsWith('sync:pick-conflict:'))     return await handleConflictPickSelect(interaction);
+    if (id.startsWith('sync:pick-ambig:'))        return await handleAmbigPickSelect(interaction);
+    if (id.startsWith('sync:ambig-candidate:'))   return await handleAmbigCandidateSelect(interaction);
     return await interaction.reply({ content: 'Unknown selection.', ephemeral: true });
   } catch (err) {
     logger.error('Select error [%s]:', id, err);
