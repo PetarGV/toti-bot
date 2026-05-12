@@ -1,8 +1,9 @@
 import { CREW_ROLE_NAMES, ROLE_SELECTIONS, ROLE_BUTTON_PREFIX } from '../utils/roleSelection.js';
-import { getPrimaryLinkForUser, setUserIgnFromInput } from './userIgnLinks.js';
-import { prepare, getConfig } from '../db/client.js';
+import { getPrimaryLinkForUser, setUserIgnFromInput, getAllLinksForUser } from './userIgnLinks.js';
+import { prepare, getConfig, transaction } from '../db/client.js';
 import { parseCoords } from '../utils/coords.js';
-import { setAccountCoords } from './travianAccounts.js';
+import { setAccountCoords, upsertAccountFromMap } from './travianAccounts.js';
+import { matchMemberToPlayer, getTravianPlayersFromMap } from '../utils/memberMapMonitor.js';
 import { assignRolesFromIgn } from './memberRoles.js';
 import { logger } from '../utils/logger.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
@@ -195,13 +196,21 @@ export async function handleOnboardSetCoordsButton(interaction) {
   await interaction.showModal(modal);
 }
 
-export function buildWelcomePayload({ memberId, rolesPanelUrl }) {
-  const lines = [
-    `👋 Welcome <@${memberId}>!`,
-    '',
-    'Hit **🚀 Start setup** below for a quick 3-step walkthrough (IGN → crew role → home coords).',
-    'Or run `/profile` and `/help` to do it yourself.',
-  ];
+export function buildWelcomePayload({ memberId, rolesPanelUrl, autoIgn, autoRoles }) {
+  const lines = [`👋 Welcome <@${memberId}>!`, ''];
+
+  if (autoIgn) {
+    const parts = [];
+    if (autoRoles?.tribeAssigned) parts.push(`tribe role **${autoRoles.tribeName}**`);
+    if (autoRoles?.allianceAssigned) parts.push(`**${autoRoles.allianceRoleName}** role`);
+    const roleNote = parts.length ? ` ${parts.join(' and ')} assigned.` : '';
+    lines.push(`✅ Found your Travian account **${autoIgn}**.${roleNote}`);
+    lines.push('Hit **🚀 Start setup** to pick your crew role and set your home coords.');
+  } else {
+    lines.push('Hit **🚀 Start setup** below for a quick 3-step walkthrough (IGN → crew role → home coords).');
+    lines.push('Or run `/profile` and `/help` to do it yourself.');
+  }
+
   if (rolesPanelUrl) {
     lines.push(`Crew roles panel: ${rolesPanelUrl}`);
   }
@@ -226,6 +235,27 @@ function getRolesPanelUrl(guildId) {
 
 export async function handleGuildMemberAdd(member) {
   if (member.user?.bot) return;
+
+  // Auto-match display name against map if no existing links
+  let autoIgn = null;
+  let autoRoles = null;
+  const players = getTravianPlayersFromMap();
+  if (players.length > 0 && getAllLinksForUser(member.id).length === 0) {
+    const match = matchMemberToPlayer(member, players);
+    if (match.status === 'matched') {
+      const ign = match.player.player;
+      const link = transaction(() => {
+        prepare('INSERT OR IGNORE INTO users (discord_id) VALUES (?)').run(member.id);
+        upsertAccountFromMap(ign);
+        prepare(`INSERT OR IGNORE INTO user_ign_links (discord_id, ign, is_primary, source) VALUES (?, ?, 1, 'sync')`).run(member.id, ign);
+      });
+      link();
+      autoIgn = ign;
+      autoRoles = await assignRolesFromIgn({ member, ign });
+      logger.info(`guildMemberAdd: auto-linked ${member.user.tag} → ${ign}`);
+    }
+  }
+
   const channelId = getConfig('welcome_channel_id');
   if (!channelId) {
     logger.warn('guildMemberAdd: welcome_channel_id not configured — skipping greeting');
@@ -245,6 +275,8 @@ export async function handleGuildMemberAdd(member) {
   const payload = buildWelcomePayload({
     memberId: member.id,
     rolesPanelUrl: getRolesPanelUrl(member.guild.id),
+    autoIgn,
+    autoRoles,
   });
   try {
     await channel.send(payload);
