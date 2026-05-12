@@ -18,6 +18,7 @@ import { adminLink, adminUnlink, adminSetPrimary, getAllLinksForUser, getPrimary
 import { upsertAccountFromMap } from '../handlers/travianAccounts.js';
 import { buildSyncResolveButtons } from '../handlers/syncResolve.js';
 import { normalizeIgn } from '../utils/ign.js';
+import { applyCoordsAndDeriveTribe } from '../handlers/onboarding.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH  = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
@@ -302,6 +303,36 @@ export async function handleAdmin(interaction) {
       content: `✅ Welcome channel set to <#${channel.id}>. New members will be greeted there.`,
       ephemeral: true,
     });
+  }
+
+  if (sub === 'set-coords') {
+    const target = interaction.options.getUser('discord');
+    const coords = interaction.options.getString('coords').trim();
+    const member = await interaction.guild?.members.fetch(target.id).catch(() => null);
+    if (!member) {
+      return interaction.reply({ content: `❌ Could not fetch member <@${target.id}>.`, ephemeral: true });
+    }
+    const result = await applyCoordsAndDeriveTribe({
+      discordId: target.id, coordsString: coords, member,
+    });
+    if (!result.ok) {
+      const msg = result.reason === 'invalid_coords'
+        ? `❌ Invalid coords: \`${coords}\`. Try \`-12|34\`.`
+        : result.reason === 'no_village'
+          ? `❌ No village at \`${coords}\`. Run \`/admin fetch-map\` to refresh.`
+          : result.reason === 'npc_village'
+            ? `❌ \`${coords}\` is a Nature/Natars village.`
+            : result.reason === 'wrong_owner'
+              ? `❌ \`${coords}\` belongs to **${result.villageOwner}**, not <@${target.id}>'s linked IGN **${result.primaryIgn}**. Use \`/admin link\` first if this is a multi-IGN setup.`
+              : result.reason === 'no_primary'
+                ? `❌ <@${target.id}> has no linked IGN. Link them first with \`/admin link\`.`
+                : '❌ Could not set coords.';
+      return interaction.reply({ content: msg, ephemeral: true });
+    }
+    const roleNote = result.roleAssigned
+      ? ` Tribe role **${result.tribeName}** assigned.`
+      : ` Tribe is **${result.tribeName}** — Discord role missing on this server.`;
+    return interaction.reply({ content: `✅ Coords saved for <@${target.id}>.${roleNote}`, ephemeral: true });
   }
 
   if (sub === 'diag') {

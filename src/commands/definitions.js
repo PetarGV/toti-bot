@@ -65,6 +65,12 @@ export const commandDefinitions = [
         .setDescription('Set the channel where new members get the onboarding greeting')
         .addChannelOption(o => o.setName('channel').setDescription('Welcome channel').setRequired(true))
     )
+    .addSubcommand(s =>
+      s.setName('set-coords')
+        .setDescription('Set home village coords for a user (auto-derives tribe + assigns Discord role)')
+        .addUserOption(o => o.setName('discord').setDescription('Discord user').setRequired(true))
+        .addStringOption(o => o.setName('coords').setDescription('Village coords (e.g. -12|34)').setRequired(true))
+    )
     .addSubcommand(s => s.setName('diag').setDescription('Show bot diagnostics (uptime, memory, DB size)'))
     .addSubcommand(s =>
       s.setName('tail-log')

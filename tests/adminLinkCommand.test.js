@@ -25,3 +25,11 @@ test('/admin exposes set-welcome-channel with a channel option', () => {
   assert.ok(opt, 'channel option exists');
   assert.equal(opt.type, 7); // ApplicationCommandOptionType.Channel
 });
+
+test('/admin exposes set-coords with discord and coords options', () => {
+  const admin = commandDefinitions.find(c => c.name === 'admin');
+  const sub = admin.options.find(o => o.name === 'set-coords');
+  assert.ok(sub, 'set-coords subcommand exists');
+  const optNames = sub.options.map(o => o.name).sort();
+  assert.deepEqual(optNames, ['coords', 'discord']);
+});
