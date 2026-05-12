@@ -5,6 +5,8 @@ import { prepare } from '../src/db/client.js';
 import {
   applyConflictAction,
   computeConflicts,
+  applyAmbiguousPick,
+  computeAmbiguous,
 } from '../src/handlers/syncResolve.js';
 import { setUserIgnFromInput, getPrimaryLinkForUser, getAllLinksForUser } from '../src/handlers/userIgnLinks.js';
 
@@ -87,4 +89,46 @@ test('computeConflicts walks the current map+audit and returns conflict rows', a
   assert.equal(rows[0].discordId, '111');
   assert.equal(rows[0].existingIgn, 'Alpha');
   assert.equal(rows[0].targetIgn, 'Beta');
+});
+
+test('computeAmbiguous returns audit.ambiguous mapped to picker rows', async () => {
+  await setupTestDb();
+  resetTables();
+  const audit = {
+    matched: [], unmatched: [],
+    ambiguous: [{
+      member: { id: '111' },
+      displayName: 'Person',
+      players: [{ player: 'Alpha' }, { player: 'Beta' }],
+    }],
+  };
+  const rows = computeAmbiguous(audit);
+  assert.equal(rows.length, 1);
+  assert.deepEqual(rows[0].candidates.sort(), ['Alpha', 'Beta']);
+});
+
+test('applyAmbiguousPick on a user with no link sets primary directly', async () => {
+  await setupTestDb();
+  resetTables();
+  seedMap([{ id: 1, x: 0, y: 0, player: 'Alpha', uid: 10 }]);
+  prepare('INSERT INTO users (discord_id) VALUES (?)').run('111');
+
+  const r = applyAmbiguousPick({ discordId: '111', pickedIgn: 'Alpha' });
+  assert.equal(r.ok, true);
+  assert.equal(r.next, 'done'); // no follow-up needed
+});
+
+test('applyAmbiguousPick on a user with an existing primary returns next=conflict', async () => {
+  await setupTestDb();
+  resetTables();
+  seedMap([
+    { id: 1, x: 0, y: 0, player: 'Alpha', uid: 10 },
+    { id: 2, x: 1, y: 1, player: 'Beta',  uid: 11 },
+  ]);
+  prepare('INSERT INTO users (discord_id) VALUES (?)').run('111');
+  setUserIgnFromInput('111', 'Alpha');
+
+  const r = applyAmbiguousPick({ discordId: '111', pickedIgn: 'Beta' });
+  assert.equal(r.ok, true);
+  assert.equal(r.next, 'conflict');
 });

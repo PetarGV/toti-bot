@@ -88,3 +88,34 @@ export function applyConflictAction({ action, discordId, targetIgn }) {
 
   return { ok: true };
 }
+
+export function computeAmbiguous(audit) {
+  return (audit.ambiguous ?? []).map(row => ({
+    discordId:   row.member.id,
+    displayName: row.displayName,
+    candidates:  (row.players ?? []).map(p => p.player),
+  }));
+}
+
+// Returns:
+// - { ok: true, next: 'done' } when the link was set directly (user had no primary)
+// - { ok: true, next: 'conflict' } when caller should route through applyConflictAction
+// - { ok: false, reason } on validation failure
+export function applyAmbiguousPick({ discordId, pickedIgn }) {
+  const valid = validateIgnAgainstMap(pickedIgn);
+  if (!valid.ok) return { ok: false, reason: 'invalid_ign' };
+
+  const primary = getPrimaryLinkForUser(discordId);
+  if (primary) {
+    return { ok: true, next: 'conflict' };
+  }
+
+  const run = transaction(() => {
+    prepare('INSERT OR IGNORE INTO users (discord_id) VALUES (?)').run(discordId);
+    upsertAccountFromMap(valid.canonical);
+    prepare(`INSERT INTO user_ign_links (discord_id, ign, is_primary, source) VALUES (?, ?, 1, 'admin')`).run(discordId, valid.canonical);
+  });
+  run();
+
+  return { ok: true, next: 'done' };
+}
