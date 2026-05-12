@@ -19,6 +19,7 @@ import { upsertAccountFromMap } from '../handlers/travianAccounts.js';
 import { buildSyncResolveButtons } from '../handlers/syncResolve.js';
 import { normalizeIgn } from '../utils/ign.js';
 import { applyCoordsAndDeriveTribe } from '../handlers/onboarding.js';
+import { assignRolesFromIgn } from '../handlers/memberRoles.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH  = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
@@ -195,6 +196,16 @@ export async function handleAdmin(interaction) {
       ? applyMemberMapProfileMatches(audit)
       : { updated: [], alreadyLinked: [], conflicts: [] };
 
+    let rolesAssigned = 0;
+    if (profileSync.updated.length > 0) {
+      const roleResults = await Promise.allSettled(
+        profileSync.updated.map(row => assignRolesFromIgn({ member: row.member, ign: row.player.player })),
+      );
+      rolesAssigned = roleResults.filter(
+        r => r.status === 'fulfilled' && (r.value.tribeAssigned || r.value.allianceAssigned),
+      ).length;
+    }
+
     const embed = new EmbedBuilder()
       .setColor(COLORS.brand.info)
       .setTitle('Discord Member Map Sync')
@@ -208,6 +219,7 @@ export async function handleAdmin(interaction) {
         { name: 'Travian Players',  value: String(audit.totalPlayers), inline: true },
         { name: 'Unique Matches',   value: String(audit.matched.length), inline: true },
         { name: 'Profiles Updated', value: String(profileSync.updated.length), inline: true },
+        { name: 'Roles Assigned',   value: String(rolesAssigned), inline: true },
         { name: 'Already Linked',   value: String(profileSync.alreadyLinked.length), inline: true },
         { name: 'Profile Conflicts', value: String(profileSync.conflicts.length), inline: true },
         { name: 'Ambiguous',        value: String(audit.ambiguous.length), inline: true },
@@ -329,9 +341,10 @@ export async function handleAdmin(interaction) {
                 : '❌ Could not set coords.';
       return interaction.reply({ content: msg, ephemeral: true });
     }
-    const roleNote = result.roleAssigned
+    let roleNote = result.roleAssigned
       ? ` Tribe role **${result.tribeName}** assigned.`
       : ` Tribe is **${result.tribeName}** — Discord role missing on this server.`;
+    if (result.allianceAssigned) roleNote += ` **${result.allianceRoleName}** role assigned.`;
     return interaction.reply({ content: `✅ Coords saved for <@${target.id}>.${roleNote}`, ephemeral: true });
   }
 

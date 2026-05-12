@@ -2,9 +2,8 @@ import { CREW_ROLE_NAMES, ROLE_SELECTIONS, ROLE_BUTTON_PREFIX } from '../utils/r
 import { getPrimaryLinkForUser, setUserIgnFromInput } from './userIgnLinks.js';
 import { prepare, getConfig } from '../db/client.js';
 import { parseCoords } from '../utils/coords.js';
-import { setAccountCoords, setAccountTribe } from './travianAccounts.js';
-import { buildTribeRolePlan } from '../utils/tribeRoles.js';
-import { getTribe } from '../utils/tribes.js';
+import { setAccountCoords } from './travianAccounts.js';
+import { assignRolesFromIgn } from './memberRoles.js';
 import { logger } from '../utils/logger.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 
@@ -19,27 +18,6 @@ export function getNextStep({ discordId, memberRoleNames }) {
   if (!hasCrewRole(memberRoleNames)) return 'role';
   if (primary.home_x == null) return 'coords';
   return 'done';
-}
-
-async function assignTribeRole({ member, plan }) {
-  const guildRoles = member.guild.roles.cache;
-  const findByName = (name) => {
-    if (typeof guildRoles.find === 'function') return guildRoles.find(r => r.name === name);
-    return Array.from(guildRoles.values()).find(r => r.name === name);
-  };
-
-  const targetRole = findByName(plan.targetName);
-  if (plan.addRoleNames.length > 0 && !targetRole) {
-    logger.warn(`tribe role '${plan.targetName}' missing on guild — skipping assignment`);
-    return false;
-  }
-
-  const toAdd = plan.addRoleNames.map(findByName).filter(Boolean);
-  const toRemove = plan.removeRoleNames.map(findByName).filter(Boolean);
-
-  if (toAdd.length) await member.roles.add(toAdd);
-  if (toRemove.length) await member.roles.remove(toRemove);
-  return true;
 }
 
 export async function applyCoordsAndDeriveTribe({ discordId, coordsString, member }) {
@@ -59,16 +37,15 @@ export async function applyCoordsAndDeriveTribe({ discordId, coordsString, membe
   }
 
   setAccountCoords(primary.ign, parsed.x, parsed.y);
-  setAccountTribe(primary.ign, village.tid);
 
-  const memberRoleNames = Array.from(member.roles.cache.values()).map(r => r.name);
-  const plan = buildTribeRolePlan({ tid: village.tid, memberRoleNames });
-  let roleAssigned = true;
-  if (plan && (plan.addRoleNames.length || plan.removeRoleNames.length)) {
-    roleAssigned = await assignTribeRole({ member, plan });
-  }
-
-  return { ok: true, tribeName: getTribe(village.tid).name, roleAssigned };
+  const roles = await assignRolesFromIgn({ member, ign: primary.ign });
+  return {
+    ok: true,
+    tribeName: roles.tribeName ?? 'Unknown',
+    roleAssigned: roles.tribeAssigned,
+    allianceAssigned: roles.allianceAssigned,
+    allianceRoleName: roles.allianceRoleName,
+  };
 }
 
 function ignStepPayload(discordId) {
@@ -192,7 +169,16 @@ export async function handleOnboardSaveIgnModal(interaction) {
         : `❌ Could not set IGN.`;
     return interaction.reply({ content: msg, ephemeral: true });
   }
-  return interaction.reply({ content: `✅ IGN set to **${result.canonical}**. Click **Continue ➡** on the wizard to move to Step 2.`, ephemeral: true });
+  const member = await interaction.guild?.members.fetch(interaction.user.id).catch(() => null);
+  let roleNote = '';
+  if (member) {
+    const roles = await assignRolesFromIgn({ member, ign: result.canonical });
+    const parts = [];
+    if (roles.tribeAssigned) parts.push(`tribe role **${roles.tribeName}**`);
+    if (roles.allianceAssigned) parts.push(`**${roles.allianceRoleName}** role`);
+    if (parts.length) roleNote = ` ${parts.join(' and ')} assigned.`;
+  }
+  return interaction.reply({ content: `✅ IGN set to **${result.canonical}**.${roleNote} Click **Continue ➡** on the wizard to move to Step 2.`, ephemeral: true });
 }
 
 export async function handleOnboardSetCoordsButton(interaction) {
@@ -289,8 +275,9 @@ export async function handleOnboardSaveCoordsModal(interaction) {
               : '❌ Could not set coords.';
     return interaction.reply({ content: msg, ephemeral: true });
   }
-  const roleNote = result.roleAssigned
+  let roleNote = result.roleAssigned
     ? ` Tribe role **${result.tribeName}** assigned.`
-    : ` Tribe is **${result.tribeName}** — but the matching Discord role isn't on this server. Ask an admin to create it.`;
+    : ` Tribe is **${result.tribeName}** — matching role not found on this server.`;
+  if (result.allianceAssigned) roleNote += ` **${result.allianceRoleName}** role assigned.`;
   return interaction.reply({ content: `✅ Coords saved.${roleNote} Click **Continue ➡** to finish.`, ephemeral: true });
 }

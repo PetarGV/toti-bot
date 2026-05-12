@@ -7,6 +7,7 @@ import {
 import { upsertAccountFromMap, validateIgnAgainstMap } from './travianAccounts.js';
 import { normalizeIgn } from '../utils/ign.js';
 import { buildMemberMapAudit, getTravianPlayersFromMap } from '../utils/memberMapMonitor.js';
+import { assignRolesFromIgn } from './memberRoles.js';
 
 export function buildSyncResolveButtons({ adminId, conflicts, ambiguous }) {
   if (!conflicts && !ambiguous) return null;
@@ -251,7 +252,16 @@ export async function handleAmbigIgnModal(interaction) {
     return interaction.reply({ content: msg, ephemeral: true });
   }
   if (result.next === 'done') {
-    return interaction.reply({ content: `✅ Linked <@${discordId}> → **${pickedIgn}**.`, ephemeral: true });
+    const member = await interaction.guild?.members.fetch(discordId).catch(() => null);
+    let roleNote = '';
+    if (member) {
+      const roles = await assignRolesFromIgn({ member, ign: pickedIgn });
+      const parts = [];
+      if (roles.tribeAssigned) parts.push(`tribe role **${roles.tribeName}**`);
+      if (roles.allianceAssigned) parts.push(`**${roles.allianceRoleName}** role`);
+      if (parts.length) roleNote = ` ${parts.join(' and ')} assigned.`;
+    }
+    return interaction.reply({ content: `✅ Linked <@${discordId}> → **${pickedIgn}**.${roleNote}`, ephemeral: true });
   }
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`sync:act:${adminId}:${discordId}:${encodeURIComponent(pickedIgn)}:replace`).setLabel('Replace primary').setStyle(ButtonStyle.Danger),
@@ -283,8 +293,19 @@ export async function handleActButton(interaction) {
     return interaction.update({ content: `❌ ${result.reason}`, components: [] });
   }
   const verb = action === 'skip' ? 'Skipped' : action === 'replace' ? 'Replaced primary' : 'Added as secondary';
+  let roleNote = '';
+  if (action === 'replace') {
+    const member = await interaction.guild?.members.fetch(discordId).catch(() => null);
+    if (member) {
+      const roles = await assignRolesFromIgn({ member, ign: targetIgn });
+      const parts = [];
+      if (roles.tribeAssigned) parts.push(`tribe role **${roles.tribeName}**`);
+      if (roles.allianceAssigned) parts.push(`**${roles.allianceRoleName}** role`);
+      if (parts.length) roleNote = ` ${parts.join(' and ')} assigned.`;
+    }
+  }
   return interaction.update({
-    content: `✅ ${verb}: <@${discordId}> → **${targetIgn}**.`,
+    content: `✅ ${verb}: <@${discordId}> → **${targetIgn}**.${roleNote}`,
     components: [],
   });
 }
