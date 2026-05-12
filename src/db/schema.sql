@@ -5,13 +5,27 @@ CREATE TABLE IF NOT EXISTS config (
 
 CREATE TABLE IF NOT EXISTS users (
   discord_id     TEXT PRIMARY KEY,
-  ign            TEXT,
-  home_x         INTEGER,
-  home_y         INTEGER,
   role           TEXT DEFAULT 'member',
-  tribe          INTEGER,
   notify_pledges INTEGER DEFAULT 0,
   created_at     INTEGER DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS travian_accounts (
+  ign            TEXT PRIMARY KEY,
+  normalized_ign TEXT NOT NULL UNIQUE,
+  home_x         INTEGER,
+  home_y         INTEGER,
+  tribe          INTEGER,
+  created_at     INTEGER DEFAULT (unixepoch())
+);
+
+CREATE TABLE IF NOT EXISTS user_ign_links (
+  discord_id  TEXT NOT NULL REFERENCES users(discord_id) ON DELETE CASCADE,
+  ign         TEXT NOT NULL REFERENCES travian_accounts(ign) ON DELETE CASCADE,
+  is_primary  INTEGER NOT NULL DEFAULT 0,
+  source      TEXT NOT NULL,
+  created_at  INTEGER DEFAULT (unixepoch()),
+  PRIMARY KEY (discord_id, ign)
 );
 
 CREATE TABLE IF NOT EXISTS panels (
@@ -73,3 +87,6 @@ CREATE TABLE IF NOT EXISTS timers (
 CREATE INDEX IF NOT EXISTS idx_xworld_coords ON x_world(x, y);
 CREATE INDEX IF NOT EXISTS idx_calls_status  ON calls(status);
 CREATE INDEX IF NOT EXISTS idx_pledges_call  ON pledges(call_id);
+CREATE INDEX IF NOT EXISTS idx_links_ign     ON user_ign_links(ign);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_links_one_primary
+  ON user_ign_links(discord_id) WHERE is_primary = 1;
