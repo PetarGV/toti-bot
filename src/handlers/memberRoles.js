@@ -48,9 +48,11 @@ export async function assignRolesFromIgn({ member, ign }) {
   const removeRole = findRole(member, removeRoleName);
   let allianceAssigned = false;
   try {
-    if (addRole) await member.roles.add(addRole);
-    if (removeRole) await member.roles.remove(removeRole);
-    allianceAssigned = !!addRole;
+    const needsAdd = addRole && !member.roles.cache.has(addRole.id);
+    const needsRemove = removeRole && member.roles.cache.has(removeRole.id);
+    if (needsAdd) await member.roles.add(addRole);
+    if (needsRemove) await member.roles.remove(removeRole);
+    allianceAssigned = needsAdd || needsRemove;
   } catch (err) {
     logger.warn(`assignRolesFromIgn: alliance role failed for ${ign}: ${err.message}`);
   }

@@ -197,13 +197,14 @@ export async function handleAdmin(interaction) {
       : { updated: [], alreadyLinked: [], conflicts: [] };
 
     let rolesAssigned = 0;
-    if (profileSync.updated.length > 0) {
-      const roleResults = await Promise.allSettled(
-        profileSync.updated.map(row => assignRolesFromIgn({ member: row.member, ign: row.player.player })),
-      );
-      rolesAssigned = roleResults.filter(
-        r => r.status === 'fulfilled' && (r.value.tribeAssigned || r.value.allianceAssigned),
-      ).length;
+    const rowsToRole = [...profileSync.updated, ...profileSync.alreadyLinked];
+    for (const row of rowsToRole) {
+      try {
+        const roles = await assignRolesFromIgn({ member: row.member, ign: row.player.player });
+        if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
+      } catch (err) {
+        logger.warn(`sync-members: role assignment failed for ${row.member.id}: ${err.message}`);
+      }
     }
 
     const embed = new EmbedBuilder()

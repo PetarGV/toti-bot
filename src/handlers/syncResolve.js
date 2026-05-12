@@ -139,7 +139,9 @@ export async function handleResolveConflictsButton(interaction) {
   const players = getTravianPlayersFromMap();
   let memberCollection;
   try {
-    memberCollection = await interaction.guild.members.fetch();
+    memberCollection = interaction.guild.members.cache.size > 0
+      ? interaction.guild.members.cache
+      : await interaction.guild.members.fetch();
   } catch (err) {
     logger.error('syncResolve: guild.members.fetch failed:', err.message);
     return interaction.editReply({ content: `❌ Could not fetch guild members: ${err.message}` });
@@ -175,7 +177,9 @@ export async function handleResolveAmbigButton(interaction) {
   const players = getTravianPlayersFromMap();
   let memberCollection;
   try {
-    memberCollection = await interaction.guild.members.fetch();
+    memberCollection = interaction.guild.members.cache.size > 0
+      ? interaction.guild.members.cache
+      : await interaction.guild.members.fetch();
   } catch (err) {
     logger.error('syncResolve: guild.members.fetch failed:', err.message);
     return interaction.editReply({ content: `❌ Could not fetch guild members: ${err.message}` });
