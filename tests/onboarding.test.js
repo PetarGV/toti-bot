@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupTestDb, resetTables } from './helpers/testDb.js';
 import { prepare } from '../src/db/client.js';
-import { getNextStep, applyCoordsAndDeriveTribe } from '../src/handlers/onboarding.js';
+import { getNextStep, applyCoordsAndDeriveTribe, buildWizardPayload } from '../src/handlers/onboarding.js';
 import { setUserIgnFromInput, getPrimaryLinkForUser } from '../src/handlers/userIgnLinks.js';
 import { setAccountCoords } from '../src/handlers/travianAccounts.js';
 
@@ -186,4 +186,40 @@ test('applyCoordsAndDeriveTribe logs warning + still saves data when tribe role 
   assert.equal(r.roleAssigned, false); // signals missing-role case
   const link = getPrimaryLinkForUser('111');
   assert.equal(link.tribe, 7); // coords + tribe still saved
+});
+
+test('buildWizardPayload renders step 1 of 3 for the ign step', () => {
+  const payload = buildWizardPayload({ step: 'ign', discordId: '111' });
+  assert.match(payload.content, /Step 1 of 3/);
+  assert.match(payload.content, /in-game name/i);
+  const customIds = payload.components.flatMap(row =>
+    row.toJSON().components.map(c => c.custom_id),
+  );
+  assert.ok(customIds.includes('onboard:set-ign'));
+});
+
+test('buildWizardPayload renders step 2 with role buttons + Continue advance button', () => {
+  const payload = buildWizardPayload({ step: 'role', discordId: '111' });
+  assert.match(payload.content, /Step 2 of 3/);
+  const customIds = payload.components.flatMap(row =>
+    row.toJSON().components.map(c => c.custom_id),
+  );
+  assert.ok(customIds.some(id => id.startsWith('setup:roles:')));
+  assert.ok(customIds.includes('onboard:advance:111'));
+});
+
+test('buildWizardPayload renders step 3 with Set Coords + Skip', () => {
+  const payload = buildWizardPayload({ step: 'coords', discordId: '111' });
+  assert.match(payload.content, /Step 3 of 3/);
+  const customIds = payload.components.flatMap(row =>
+    row.toJSON().components.map(c => c.custom_id),
+  );
+  assert.ok(customIds.includes('onboard:set-coords'));
+  assert.ok(customIds.includes('onboard:skip:111'));
+});
+
+test('buildWizardPayload "done" returns a celebratory message and no action buttons', () => {
+  const payload = buildWizardPayload({ step: 'done', discordId: '111' });
+  assert.match(payload.content, /all set/i);
+  assert.equal(payload.components.length, 0);
 });
