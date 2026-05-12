@@ -438,4 +438,29 @@ export async function handleAdmin(interaction) {
       return interaction.editReply({ content: `❌ Backup failed: ${err.message}` });
     }
   }
+
+  if (sub === 'check') {
+    const target = interaction.options.getUser('discord');
+    const links = getAllLinksForUser(target.id);
+    if (links.length === 0) {
+      return interaction.reply({ content: `<@${target.id}> has no linked IGN.`, ephemeral: true });
+    }
+    const acceptedAlliance = getConfig('accepted_alliance') ?? 'INV';
+    const lines = links.map(link => {
+      const village = prepare(
+        `SELECT tid, alliance FROM x_world WHERE player = ? AND tid NOT IN (4, 5) LIMIT 1`,
+      ).get(link.ign);
+      const alliance = village?.alliance ?? '(none)';
+      const isAccepted = village && alliance.toLowerCase() === acceptedAlliance.toLowerCase();
+      const roleResult = !village
+        ? '❌ not found in map'
+        : isAccepted ? '✅ → **Accepted**' : '⚠️ → **TBD**';
+      const primary = link.is_primary ? ' *(primary)*' : '';
+      return `**${link.ign}**${primary} — alliance: \`${alliance}\` — ${roleResult}`;
+    });
+    return interaction.reply({
+      content: `Profile check for <@${target.id}>:\n${lines.join('\n')}`,
+      ephemeral: true,
+    });
+  }
 }

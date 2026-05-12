@@ -78,7 +78,12 @@ export const commandDefinitions = [
         .addIntegerOption(o => o.setName('lines').setDescription('Number of lines (max 200)').setRequired(false))
     )
     .addSubcommand(s => s.setName('db-vacuum').setDescription('Compact the database file'))
-    .addSubcommand(s => s.setName('backup-now').setDescription('Run a database backup immediately')),
+    .addSubcommand(s => s.setName('backup-now').setDescription('Run a database backup immediately'))
+    .addSubcommand(s =>
+      s.setName('check')
+        .setDescription('Inspect a member\'s linked IGN, map alliance, and which roles they\'d get')
+        .addUserOption(o => o.setName('discord').setDescription('Discord user').setRequired(true))
+    ),
 
   // ── Slash mirrors of panel buttons ──────────────────────────────────────
   new SlashCommandBuilder()
