@@ -191,6 +191,7 @@ export async function handleAdmin(interaction) {
     const members = Array.from(memberCollection.values())
       .filter(member => !member.user?.bot);
     const audit = buildMemberMapAudit(members, players);
+    const unresolvedAmbiguous = audit.ambiguous.filter(row => !getPrimaryLinkForUser(row.member.id));
     const updateProfiles = interaction.options.getBoolean('update-profiles') ?? true;
     const profileSync = updateProfiles
       ? applyMemberMapProfileMatches(audit)
@@ -223,7 +224,7 @@ export async function handleAdmin(interaction) {
         { name: 'Roles Assigned',   value: String(rolesAssigned), inline: true },
         { name: 'Already Linked',   value: String(profileSync.alreadyLinked.length), inline: true },
         { name: 'Profile Conflicts', value: String(profileSync.conflicts.length), inline: true },
-        { name: 'Ambiguous',        value: String(audit.ambiguous.length), inline: true },
+        { name: 'Ambiguous',        value: String(unresolvedAmbiguous.length), inline: true },
         { name: 'Unmatched',        value: String(audit.unmatched.length), inline: true },
       )
       .setFooter({ text: 'Matching ignores case, spaces, punctuation, symbols, and accents.' })
@@ -251,23 +252,23 @@ export async function handleAdmin(interaction) {
       });
     }
 
-    if (audit.ambiguous.length) {
+    if (unresolvedAmbiguous.length) {
       embed.addFields({
         name: 'Ambiguous Names',
-        value: firstLines(audit.ambiguous.map(ambiguousLine)),
+        value: firstLines(unresolvedAmbiguous.map(ambiguousLine)),
         inline: false,
       });
     }
 
     logger.info(
       `Member sync by ${interaction.user.tag}: ${audit.matched.length} matched, ` +
-      `${profileSync.updated.length} updated, ${audit.ambiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
+      `${profileSync.updated.length} updated, ${unresolvedAmbiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
     );
 
     const resolveRow = buildSyncResolveButtons({
       adminId: interaction.user.id,
       conflicts: profileSync.conflicts.length,
-      ambiguous: audit.ambiguous.length,
+      ambiguous: unresolvedAmbiguous.length,
     });
     const components = resolveRow ? [resolveRow] : [];
     return interaction.editReply({ embeds: [embed], components });
