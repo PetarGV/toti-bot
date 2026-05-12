@@ -173,20 +173,24 @@ All admin commands require Administrator permission.
 | `/setup scout` | — | Post + pin the **Scout** panel (Scout Request, Whois, Report) |
 | `/setup resources` | — | Post + pin the **Resources** panel (push buttons) |
 | `/setup general` | — | Post + pin the **General** panel (Status, Calls, Profile, Nearby Map) |
+| `/setup roles` | — | Post + pin the **Crew Role** selection panel |
 
 ### Configuration
 | Command | Args | Description |
 |---|---|---|
 | `/admin set-server` | `url` | Update Travian server URL (no restart needed) |
+| `/admin set-welcome-channel` | `channel` | Set the channel where new members receive the onboarding greeting |
 
-### Map data
-| Command | Description |
-|---|---|
-| `/admin fetch-map` | Manually trigger `map.sql` fetch |
-| `/admin map-status` | Last fetch time, total villages, top 5 alliances |
-| `/admin sync-members [update-profiles]` | Scan Discord members against Travian player names; fills missing IGN profiles by default |
+### Member & IGN management
+| Command | Args | Description |
+|---|---|---|
+| `/admin sync-members` | `[update-profiles]` | Match Discord display names against Travian players. Unique matches are auto-linked and get tribe + alliance roles assigned. Members already linked are skipped in the ambiguous list. Conflicts and remaining ambiguous cases get resolve buttons. |
+| `/admin link` | `discord` `ign` | Manually add a secondary IGN link for a Discord user |
+| `/admin unlink` | `discord` `ign` | Remove a Discord ↔ IGN link |
+| `/admin set-primary` | `discord` `ign` | Change which of a user's linked IGNs is their primary |
+| `/admin set-coords` | `discord` `coords` | Set home village coords for a user — auto-derives tribe and assigns tribe + alliance Discord roles |
 
-**Member sync matching:** Discord display names and Travian player names are normalized before comparison: lowercase, accents removed, and symbols/spaces/punctuation stripped. A Travian name must be included inside the Discord display name. If multiple equal-length player names match one member, the result is reported as ambiguous and no profile is updated.
+**Member sync matching:** Discord display names and Travian player names are normalized before comparison: lowercase, accents removed, and symbols/spaces/punctuation stripped. A Travian name must be included inside the Discord display name. If multiple equal-length player names match one member, the result is reported as ambiguous (unless they are already linked — duals and previously-resolved members are excluded).
 
 ### Round / data management
 | Command | Description |
@@ -200,6 +204,46 @@ All admin commands require Administrator permission.
 |---|---|---|
 | `/admin diag` | — | Bot uptime, RAM usage, DB size, open call count, last error |
 | `/admin tail-log` | `[lines]` | Last N log lines (default 50, max 200; redacts lines with `token`/`password`/`secret`/`api_key`) |
+
+---
+
+## 👋 Onboarding
+
+When a member joins the server the bot:
+
+1. Checks if their Discord display name **uniquely** matches a Travian player on the current map
+2. **Unique match found:** auto-links their IGN, assigns tribe + alliance roles, sends welcome message confirming what was set up with a button to continue to crew role + coords
+3. **No unique match:** sends the full 3-step wizard (IGN → crew role → home coords) in the configured welcome channel
+
+The wizard steps can also be reached any time via `/profile`.
+
+---
+
+## 🎖️ Automatic Role Assignment
+
+Tribe and alliance roles are assigned automatically — no manual admin action needed — whenever an IGN is linked. This covers: member join, onboarding wizard IGN step, `/admin sync-members`, and the sync-members conflict/ambiguous resolve flows.
+
+### Tribe roles
+
+| Role | Tribe |
+|---|---|
+| `Romans` | Romans (tid 1) |
+| `Teutons` | Teutons (tid 2) |
+| `Gauls` | Gauls (tid 3) |
+| `Egyptians` | Egyptians (tid 6) |
+| `Huns` | Huns (tid 7) |
+| `Spartans` | Spartans (tid 8) |
+
+Derived from the player's villages in `x_world` — no coords required.
+
+### Alliance roles
+
+| Role | Condition |
+|---|---|
+| `Accepted` | Player's alliance matches the configured alliance name |
+| `Imposter` | Player's alliance does **not** match |
+
+The configured alliance name defaults to `Invictus`. To change it: update the `accepted_alliance` key in the `config` DB table.
 
 ---
 

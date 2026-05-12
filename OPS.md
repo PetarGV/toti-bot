@@ -19,16 +19,72 @@ curl http://127.0.0.1:8080/metrics
 
 ## Inside Discord (admin only)
 
+**Server / map**
+
 | Command | What it does |
 |---|---|
-| `/admin diag` | uptime, RAM, DB size, open call count, last error |
-| `/admin tail-log lines:100` | last N log lines (token/secret keywords redacted) |
-| `/admin map-status` | last map.sql fetch time + top alliances |
-| `/admin fetch-map` | manual map fetch |
-| `/admin set-server url:<>` | change Travian server URL (no restart needed) |
-| `/admin reset-round` | wipe map + calls (keeps user profiles) |
-| `/admin db-vacuum` | compact DB file |
-| `/admin backup-now` | run backup immediately |
+| `/admin set-server url:<>` | Change Travian server URL (no restart needed) |
+| `/admin fetch-map` | Manually fetch the latest map.sql |
+| `/admin map-status` | Last fetch time, total villages, top alliances |
+| `/admin reset-round` | Wipe map + calls for a new round (user profiles kept) |
+
+**Member & IGN management**
+
+| Command | What it does |
+|---|---|
+| `/admin sync-members` | Match Discord names against Travian map — auto-links unique matches, assigns tribe + alliance roles, flags conflicts/ambiguous for manual resolution |
+| `/admin link discord:@ ign:<name>` | Manually link a Discord user to a Travian IGN (added as secondary) |
+| `/admin unlink discord:@ ign:<name>` | Remove a Discord ↔ IGN link |
+| `/admin set-primary discord:@ ign:<name>` | Change which of a user's IGNs is their primary |
+| `/admin set-coords discord:@ coords:<x\|y>` | Set home village coords for a user — auto-assigns tribe + alliance Discord roles |
+| `/admin set-welcome-channel channel:#` | Set the channel where new members get the onboarding greeting |
+
+**Diagnostics / maintenance**
+
+| Command | What it does |
+|---|---|
+| `/admin diag` | Uptime, RAM, DB size, open call count, last error |
+| `/admin tail-log lines:100` | Last N log lines (token/secret keywords redacted) |
+| `/admin db-vacuum` | Compact the database file |
+| `/admin backup-now` | Run a database backup immediately |
+
+**Setup panels** *(requires Manage Channels)*
+
+| Command | What it does |
+|---|---|
+| `/setup roles` | Post the crew role selection panel |
+| `/setup defense` / `offense` / `scout` / `resources` / `general` | Post the matching operations panel |
+
+---
+
+## Member commands
+
+| Command | What it does |
+|---|---|
+| `/profile` | View your profile (IGN, tribe, coords, crew role) and set/edit your info |
+| `/status` | Your profile + all active calls you're involved in |
+| `/calls` | List all active calls |
+| `/whois coords:<x\|y>` | Look up who owns a village |
+| `/nearby coords:<x\|y>` | Find villages near a location (radius + limit optional) |
+| `/defense` / `/offense` / `/scout` / `/reinforce` | Post a call |
+| `/push resource:<> coords:<> amount:<>` | Request a resource push |
+| `/timer set interval:<7m>` | Personal recurring reminder |
+| `/leaderboard` | Alliance leaderboards (pushers, defenders, scouts, requesters) |
+| `/help` | Interactive guide |
+
+---
+
+## Automatic role assignment
+
+Tribe and alliance roles are assigned automatically whenever an IGN is linked — on join, via sync-members, when setting IGN in the wizard, or via the resolve flows.
+
+| Discord role | Assigned when |
+|---|---|
+| `Romans` / `Teutons` / `Gauls` / `Egyptians` / `Huns` / `Spartans` | Player's tribe derived from Travian map |
+| `Accepted` | Player is in the configured alliance (default: `Invictus`) |
+| `Imposter` | Player is **not** in the configured alliance |
+
+To change the alliance name: update `accepted_alliance` in the `config` DB table.
 
 ## Files
 
