@@ -260,6 +260,14 @@ export async function handleAdmin(interaction) {
       });
     }
 
+    if (audit.unmatched.length) {
+      embed.addFields({
+        name: 'Unmatched Members',
+        value: firstLines(audit.unmatched.map(row => `<@${row.member.id}> (${row.displayName})`)),
+        inline: false,
+      });
+    }
+
     logger.info(
       `Member sync by ${interaction.user.tag}: ${audit.matched.length} matched, ` +
       `${profileSync.updated.length} updated, ${unresolvedAmbiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
