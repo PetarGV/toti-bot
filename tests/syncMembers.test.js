@@ -5,6 +5,7 @@ import { prepare } from '../src/db/client.js';
 import { applyMemberMapProfileMatches } from '../src/commands/admin.js';
 import { setUserIgnFromInput, adminLink, getPrimaryLinkForUser, getAllLinksForUser } from '../src/handlers/userIgnLinks.js';
 import { upsertAccountFromMap } from '../src/handlers/travianAccounts.js';
+import { buildSyncResolveButtons } from '../src/handlers/syncResolve.js';
 
 function seedMap(rows) {
   for (const r of rows) {
@@ -61,4 +62,20 @@ test('applyMemberMapProfileMatches skips users with any existing link', async ()
   assert.equal(result.updated.length, 0);
   assert.equal(result.conflicts.length, 1);     // 111 — different primary
   assert.equal(result.alreadyLinked.length, 1); // 222 — already linked to same ign
+});
+
+test('buildSyncResolveButtons returns a row only when there is anything to resolve', () => {
+  const empty = buildSyncResolveButtons({ adminId: '999', conflicts: 0, ambiguous: 0 });
+  assert.equal(empty, null);
+
+  const both = buildSyncResolveButtons({ adminId: '999', conflicts: 2, ambiguous: 1 });
+  const json = both.toJSON();
+  assert.equal(json.components.length, 2);
+  assert.equal(json.components[0].custom_id, 'sync:resolve-conflicts:999');
+  assert.equal(json.components[1].custom_id, 'sync:resolve-ambig:999');
+  assert.match(json.components[0].label, /2 conflict/);
+  assert.match(json.components[1].label, /1 ambiguous/);
+
+  const onlyConflicts = buildSyncResolveButtons({ adminId: '999', conflicts: 3, ambiguous: 0 });
+  assert.equal(onlyConflicts.toJSON().components.length, 1);
 });

@@ -16,6 +16,7 @@ import {
 } from '../utils/memberMapMonitor.js';
 import { adminLink, adminUnlink, adminSetPrimary, getAllLinksForUser, getPrimaryLinkForUser } from '../handlers/userIgnLinks.js';
 import { upsertAccountFromMap } from '../handlers/travianAccounts.js';
+import { buildSyncResolveButtons } from '../handlers/syncResolve.js';
 import { normalizeIgn } from '../utils/ign.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -249,7 +250,13 @@ export async function handleAdmin(interaction) {
       `${profileSync.updated.length} updated, ${audit.ambiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
     );
 
-    return interaction.editReply({ embeds: [embed] });
+    const resolveRow = buildSyncResolveButtons({
+      adminId: interaction.user.id,
+      conflicts: profileSync.conflicts.length,
+      ambiguous: audit.ambiguous.length,
+    });
+    const components = resolveRow ? [resolveRow] : [];
+    return interaction.editReply({ embeds: [embed], components });
   }
 
   if (sub === 'link') {
