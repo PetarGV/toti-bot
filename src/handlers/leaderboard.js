@@ -14,18 +14,18 @@ function rankedLine(i, line) {
 // Group raw per-Discord-ID rows into per-IGN buckets (users without an IGN
 // stay as their own bucket, keyed by discord_id). Each bucket aggregates
 // the numeric `valueKey` field via the supplied combine function.
-function groupByIgn(rows, valueKeys) {
+export function groupByIgn(rows, valueKeys) {
   const ignToBucket = new Map();
   const userToIgn = new Map();
   if (rows.length) {
-    const ignRows = prepare('SELECT discord_id, ign FROM users WHERE ign IS NOT NULL').all();
+    const ignRows = prepare('SELECT discord_id, ign FROM user_ign_links WHERE is_primary = 1').all();
     for (const r of ignRows) userToIgn.set(r.discord_id, r.ign);
   }
 
   for (const row of rows) {
     const ign = userToIgn.get(row.user_id) ?? null;
     const norm = normalizeIgn(ign);
-    const key = norm ?? `__solo__:${row.user_id}`;
+    const key = norm || `__solo__:${row.user_id}`;
 
     let bucket = ignToBucket.get(key);
     if (!bucket) {
