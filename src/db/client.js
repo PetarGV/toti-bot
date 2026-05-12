@@ -8,13 +8,17 @@ const require = createRequire(import.meta.url);
 const initSqlJs = require('sql.js');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
-const DATA_DIR = dirname(DB_PATH);
+let DB_PATH = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
+let DATA_DIR = dirname(DB_PATH);
 
 let db;
 let SQL;
 
 export async function initDb() {
+  // Re-compute paths to support test isolation (process.env.DB_PATH can change per test)
+  DB_PATH = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
+  DATA_DIR = dirname(DB_PATH);
+
   SQL = await initSqlJs();
 
   if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
