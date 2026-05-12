@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
 import { prepare, transaction } from '../db/client.js';
 import {
   getAllLinksForUser,
@@ -6,6 +6,7 @@ import {
 } from './userIgnLinks.js';
 import { upsertAccountFromMap, validateIgnAgainstMap } from './travianAccounts.js';
 import { normalizeIgn } from '../utils/ign.js';
+import { buildMemberMapAudit, getTravianPlayersFromMap } from '../utils/memberMapMonitor.js';
 
 export function buildSyncResolveButtons({ adminId, conflicts, ambiguous }) {
   if (!conflicts && !ambiguous) return null;
@@ -132,9 +133,20 @@ export async function handleResolveConflictsButton(interaction) {
   const blocked = ensureSameAdmin(interaction, adminId);
   if (blocked) return blocked;
 
-  const conflictRows = extractRowsFromEmbed(interaction.message, 'Profile Conflicts');
+  await interaction.deferReply({ ephemeral: true });
+  const players = getTravianPlayersFromMap();
+  let memberCollection;
+  try {
+    memberCollection = await interaction.guild.members.fetch();
+  } catch {
+    return interaction.editReply({ content: '❌ Could not fetch guild members.' });
+  }
+  const members = Array.from(memberCollection.values()).filter(m => !m.user?.bot);
+  const audit = buildMemberMapAudit(members, players);
+  const conflictRows = computeConflicts(audit);
+
   if (conflictRows.length === 0) {
-    return interaction.reply({ content: 'No conflicts left to resolve. Re-run `/admin sync-members` for a fresh report.', ephemeral: true });
+    return interaction.editReply({ content: 'No conflicts left to resolve.' });
   }
   const select = new StringSelectMenuBuilder()
     .setCustomId(`sync:pick-conflict:${adminId}`)
@@ -145,10 +157,9 @@ export async function handleResolveConflictsButton(interaction) {
         .setLabel(`${r.displayName ?? r.discordId} → ${r.targetIgn}`.slice(0, 100))
         .setDescription(`current: ${r.existingIgn}`.slice(0, 100))
     ));
-  return interaction.reply({
+  return interaction.editReply({
     content: 'Select a conflict to resolve:',
     components: [new ActionRowBuilder().addComponents(select)],
-    ephemeral: true,
   });
 }
 
@@ -157,23 +168,33 @@ export async function handleResolveAmbigButton(interaction) {
   const blocked = ensureSameAdmin(interaction, adminId);
   if (blocked) return blocked;
 
-  const ambigRows = extractRowsFromEmbed(interaction.message, 'Ambiguous Names');
+  await interaction.deferReply({ ephemeral: true });
+  const players = getTravianPlayersFromMap();
+  let memberCollection;
+  try {
+    memberCollection = await interaction.guild.members.fetch();
+  } catch {
+    return interaction.editReply({ content: '❌ Could not fetch guild members.' });
+  }
+  const members = Array.from(memberCollection.values()).filter(m => !m.user?.bot);
+  const audit = buildMemberMapAudit(members, players);
+  const ambigRows = computeAmbiguous(audit).filter(r => !getPrimaryLinkForUser(r.discordId));
+
   if (ambigRows.length === 0) {
-    return interaction.reply({ content: 'No ambiguous rows left. Re-run `/admin sync-members` for a fresh report.', ephemeral: true });
+    return interaction.editReply({ content: 'No ambiguous members left to resolve.' });
   }
   const select = new StringSelectMenuBuilder()
     .setCustomId(`sync:pick-ambig:${adminId}`)
     .setPlaceholder('Pick an ambiguous member…')
     .addOptions(ambigRows.slice(0, 25).map(r =>
       new StringSelectMenuOptionBuilder()
-        .setValue(`${r.discordId}|${(r.candidates ?? []).map(encodeURIComponent).join(',')}`)
-        .setLabel(`${r.displayName ?? r.discordId}`.slice(0, 100))
-        .setDescription(`candidates: ${(r.candidates ?? []).join(', ')}`.slice(0, 100))
+        .setValue(r.discordId)
+        .setLabel((r.displayName ?? r.discordId).slice(0, 100))
+        .setDescription(`candidates: ${r.candidates.join(', ')}`.slice(0, 100))
     ));
-  return interaction.reply({
-    content: 'Select a member, then I\'ll show their candidate names:',
+  return interaction.editReply({
+    content: 'Select a member to link:',
     components: [new ActionRowBuilder().addComponents(select)],
-    ephemeral: true,
   });
 }
 
@@ -200,44 +221,47 @@ export async function handleAmbigPickSelect(interaction) {
   const blocked = ensureSameAdmin(interaction, adminId);
   if (blocked) return blocked;
 
-  const [discordId, encodedCsv] = interaction.values[0].split('|');
-  const candidates = encodedCsv.split(',').map(decodeURIComponent);
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId(`sync:ambig-candidate:${adminId}:${discordId}`)
-    .setPlaceholder('Pick the correct Travian IGN…')
-    .addOptions(candidates.slice(0, 25).map(c =>
-      new StringSelectMenuOptionBuilder().setValue(c).setLabel(c)
-    ));
-  return interaction.update({
-    content: `Pick the correct IGN for <@${discordId}>:`,
-    components: [new ActionRowBuilder().addComponents(select)],
-  });
+  const discordId = interaction.values[0];
+  const modal = new ModalBuilder()
+    .setCustomId(`sync:ambig-ign-modal:${adminId}:${discordId}`)
+    .setTitle('Link IGN for member');
+  const input = new TextInputBuilder()
+    .setCustomId('ign')
+    .setLabel('Travian in-game name')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setMaxLength(30);
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+  await interaction.showModal(modal);
 }
 
-export async function handleAmbigCandidateSelect(interaction) {
+export async function handleAmbigIgnModal(interaction) {
   const parts = interaction.customId.split(':');
   const adminId = parts[2];
   const discordId = parts[3];
   const blocked = ensureSameAdmin(interaction, adminId);
   if (blocked) return blocked;
 
-  const pickedIgn = interaction.values[0];
+  const pickedIgn = interaction.fields.getTextInputValue('ign').trim();
   const result = applyAmbiguousPick({ discordId, pickedIgn });
   if (!result.ok) {
-    return interaction.update({ content: `❌ ${result.reason}`, components: [] });
+    const msg = result.reason === 'invalid_ign'
+      ? `❌ \`${pickedIgn}\` isn't a player on the current map.`
+      : `❌ ${result.reason}`;
+    return interaction.reply({ content: msg, ephemeral: true });
   }
   if (result.next === 'done') {
-    return interaction.update({ content: `✅ Linked <@${discordId}> → **${pickedIgn}**.`, components: [] });
+    return interaction.reply({ content: `✅ Linked <@${discordId}> → **${pickedIgn}**.`, ephemeral: true });
   }
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`sync:act:${adminId}:${discordId}:${encodeURIComponent(pickedIgn)}:replace`).setLabel('Replace primary').setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId(`sync:act:${adminId}:${discordId}:${encodeURIComponent(pickedIgn)}:secondary`).setLabel('Add as secondary').setStyle(ButtonStyle.Primary),
     new ButtonBuilder().setCustomId(`sync:act:${adminId}:${discordId}:${encodeURIComponent(pickedIgn)}:skip`).setLabel('Skip').setStyle(ButtonStyle.Secondary),
   );
-  return interaction.update({
+  return interaction.reply({
     content: `<@${discordId}> already has a primary. Resolve **${pickedIgn}**:`,
     components: [row],
+    ephemeral: true,
   });
 }
 
@@ -265,28 +289,3 @@ export async function handleActButton(interaction) {
   });
 }
 
-function extractRowsFromEmbed(message, fieldName) {
-  const out = [];
-  const embed = message?.embeds?.[0];
-  if (!embed) return out;
-  const field = embed.fields?.find(f => f.name === fieldName);
-  if (!field) return out;
-  if (fieldName === 'Profile Conflicts') {
-    const re = /<@(\d+)> has profile \*\*([^*]+)\*\*, matched \*\*([^*]+)\*\*/g;
-    let m;
-    while ((m = re.exec(field.value)) !== null) {
-      out.push({ discordId: m[1], existingIgn: m[2], targetIgn: m[3] });
-    }
-  } else if (fieldName === 'Ambiguous Names') {
-    const lines = field.value.split('\n');
-    for (const line of lines) {
-      const idMatch = line.match(/<@(\d+)>/);
-      const nameMatch = line.match(/\*\*([^*]+)\*\*\s*->\s*(.+)$/);
-      if (!nameMatch) continue;
-      const displayName = nameMatch[1];
-      const candidates = nameMatch[2].split(/\s*\/\s*/).map(s => s.trim());
-      out.push({ discordId: idMatch?.[1], displayName, candidates });
-    }
-  }
-  return out;
-}

@@ -63,7 +63,7 @@ import {
   handleResolveAmbigButton,
   handleConflictPickSelect,
   handleAmbigPickSelect,
-  handleAmbigCandidateSelect,
+  handleAmbigIgnModal,
   handleActButton,
 } from './syncResolve.js';
 
@@ -197,7 +197,6 @@ export async function routeSelect(interaction) {
     if (id.startsWith('combat:pick:'))   return await handleCombatPickSelect(interaction);
     if (id.startsWith('sync:pick-conflict:'))     return await handleConflictPickSelect(interaction);
     if (id.startsWith('sync:pick-ambig:'))        return await handleAmbigPickSelect(interaction);
-    if (id.startsWith('sync:ambig-candidate:'))   return await handleAmbigCandidateSelect(interaction);
     return await interaction.reply({ content: 'Unknown selection.', ephemeral: true });
   } catch (err) {
     logger.error('Select error [%s]:', id, err);
@@ -225,6 +224,7 @@ export async function routeModal(interaction) {
     if (id === 'profile:save-coords')           return await handleEditCoordsModal(interaction);
     if (id === 'onboard:save-ign')    return await handleOnboardSaveIgnModal(interaction);
     if (id === 'onboard:save-coords') return await handleOnboardSaveCoordsModal(interaction);
+    if (id.startsWith('sync:ambig-ign-modal:')) return await handleAmbigIgnModal(interaction);
     return await notImplemented(interaction);
   } catch (err) {
     logger.error('Modal error [%s]:', id, err);
