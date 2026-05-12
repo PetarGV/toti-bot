@@ -15,6 +15,7 @@ import {
   getTravianPlayersFromMap,
   normalizeNameForMatch,
 } from '../utils/memberMapMonitor.js';
+import { adminLink, adminUnlink, adminSetPrimary } from '../handlers/userIgnLinks.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH  = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
@@ -245,6 +246,51 @@ export async function handleAdmin(interaction) {
     );
 
     return interaction.editReply({ embeds: [embed] });
+  }
+
+  if (sub === 'link') {
+    const target = interaction.options.getUser('discord');
+    const ign    = interaction.options.getString('ign').trim();
+    const result = adminLink(target.id, ign);
+    if (!result.ok) {
+      const msg = result.reason === 'not_found'
+        ? `❌ \`${ign}\` isn't a player on the current map.`
+        : result.reason === 'ambiguous'
+          ? `❌ Multiple Travian players match \`${ign}\`. Use a more specific name.`
+          : `❌ Could not link.`;
+      return interaction.reply({ content: msg, ephemeral: true });
+    }
+    return interaction.reply({ content: `✅ Linked <@${target.id}> ↔ **${result.canonical}** (secondary).`, ephemeral: true });
+  }
+
+  if (sub === 'unlink') {
+    const target = interaction.options.getUser('discord');
+    const ign    = interaction.options.getString('ign').trim();
+    const result = adminUnlink(target.id, ign);
+    if (!result.ok) return interaction.reply({ content: '❌ That IGN isn\'t in the account table.', ephemeral: true });
+    return interaction.reply({ content: `✅ Unlinked <@${target.id}> from **${result.canonical}**.`, ephemeral: true });
+  }
+
+  if (sub === 'set-primary') {
+    const target = interaction.options.getUser('discord');
+    const ign    = interaction.options.getString('ign').trim();
+    const result = adminSetPrimary(target.id, ign);
+    if (!result.ok) {
+      const msg = result.reason === 'not_linked'
+        ? `❌ <@${target.id}> isn't linked to **${ign}**.`
+        : `❌ That IGN isn't in the account table.`;
+      return interaction.reply({ content: msg, ephemeral: true });
+    }
+    return interaction.reply({ content: `✅ Primary IGN for <@${target.id}> is now **${result.canonical}**.`, ephemeral: true });
+  }
+
+  if (sub === 'set-welcome-channel') {
+    const channel = interaction.options.getChannel('channel');
+    setConfig('welcome_channel_id', channel.id);
+    return interaction.reply({
+      content: `✅ Welcome channel set to <#${channel.id}>. New members will be greeted there.`,
+      ephemeral: true,
+    });
   }
 
   if (sub === 'diag') {

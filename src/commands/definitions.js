@@ -42,6 +42,29 @@ export const commandDefinitions = [
             .setRequired(false)
         )
     )
+    .addSubcommand(s =>
+      s.setName('link')
+        .setDescription('Link a Discord user to a Travian IGN (as a secondary link)')
+        .addUserOption(o => o.setName('discord').setDescription('Discord user').setRequired(true))
+        .addStringOption(o => o.setName('ign').setDescription('Exact Travian in-game name').setRequired(true))
+    )
+    .addSubcommand(s =>
+      s.setName('unlink')
+        .setDescription('Remove a Discord ↔ IGN link')
+        .addUserOption(o => o.setName('discord').setDescription('Discord user').setRequired(true))
+        .addStringOption(o => o.setName('ign').setDescription('Travian IGN to unlink').setRequired(true))
+    )
+    .addSubcommand(s =>
+      s.setName('set-primary')
+        .setDescription('Set which of a user\'s linked IGNs is their primary')
+        .addUserOption(o => o.setName('discord').setDescription('Discord user').setRequired(true))
+        .addStringOption(o => o.setName('ign').setDescription('IGN to mark as primary').setRequired(true))
+    )
+    .addSubcommand(s =>
+      s.setName('set-welcome-channel')
+        .setDescription('Set the channel where new members get the onboarding greeting')
+        .addChannelOption(o => o.setName('channel').setDescription('Welcome channel').setRequired(true))
+    )
     .addSubcommand(s => s.setName('diag').setDescription('Show bot diagnostics (uptime, memory, DB size)'))
     .addSubcommand(s =>
       s.setName('tail-log')
