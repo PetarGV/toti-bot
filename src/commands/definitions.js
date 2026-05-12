@@ -83,6 +83,11 @@ export const commandDefinitions = [
       s.setName('check')
         .setDescription('Inspect a member\'s linked IGN, map alliance, and which roles they\'d get')
         .addUserOption(o => o.setName('discord').setDescription('Discord user').setRequired(true))
+    )
+    .addSubcommand(s =>
+      s.setName('map-search')
+        .setDescription('Look up a player name directly in the Travian map data')
+        .addStringOption(o => o.setName('ign').setDescription('Player name (partial match)').setRequired(true))
     ),
 
   // ── Slash mirrors of panel buttons ──────────────────────────────────────

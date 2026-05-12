@@ -463,4 +463,29 @@ export async function handleAdmin(interaction) {
       ephemeral: true,
     });
   }
+
+  if (sub === 'map-search') {
+    const ign = interaction.options.getString('ign').trim();
+    const rows = prepare(`
+      SELECT player, alliance, tid, COUNT(*) as villages
+      FROM x_world
+      WHERE tid NOT IN (4, 5) AND lower(player) LIKE lower(?)
+      GROUP BY player, alliance, tid
+      ORDER BY villages DESC
+      LIMIT 10
+    `).all(`%${ign}%`);
+    if (rows.length === 0) {
+      return interaction.reply({ content: `No players found matching \`${ign}\`.`, ephemeral: true });
+    }
+    const acceptedAlliance = getConfig('accepted_alliance') ?? 'INV';
+    const lines = rows.map(r => {
+      const alliance = r.alliance ?? '(none)';
+      const isAccepted = alliance.toLowerCase() === acceptedAlliance.toLowerCase();
+      const roleResult = isAccepted ? '✅ Accepted' : '⚠️ TBD';
+      const tribeNames = { 1: 'Romans', 2: 'Teutons', 3: 'Gauls', 6: 'Egyptians', 7: 'Huns', 8: 'Spartans' };
+      const tribe = tribeNames[r.tid] ?? `tid:${r.tid}`;
+      return `**${r.player}** — alliance: \`${alliance}\` — ${tribe} — ${r.villages} village${r.villages !== 1 ? 's' : ''} — ${roleResult}`;
+    });
+    return interaction.reply({ content: lines.join('\n'), ephemeral: true });
+  }
 }
