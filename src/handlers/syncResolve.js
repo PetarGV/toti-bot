@@ -8,6 +8,7 @@ import { upsertAccountFromMap, validateIgnAgainstMap } from './travianAccounts.j
 import { normalizeIgn } from '../utils/ign.js';
 import { buildMemberMapAudit, getTravianPlayersFromMap } from '../utils/memberMapMonitor.js';
 import { assignRolesFromIgn } from './memberRoles.js';
+import { logger } from '../utils/logger.js';
 
 export function buildSyncResolveButtons({ adminId, conflicts, ambiguous }) {
   if (!conflicts && !ambiguous) return null;
@@ -139,8 +140,9 @@ export async function handleResolveConflictsButton(interaction) {
   let memberCollection;
   try {
     memberCollection = await interaction.guild.members.fetch();
-  } catch {
-    return interaction.editReply({ content: '❌ Could not fetch guild members.' });
+  } catch (err) {
+    logger.error('syncResolve: guild.members.fetch failed:', err.message);
+    return interaction.editReply({ content: `❌ Could not fetch guild members: ${err.message}` });
   }
   const members = Array.from(memberCollection.values()).filter(m => !m.user?.bot);
   const audit = buildMemberMapAudit(members, players);
@@ -174,8 +176,9 @@ export async function handleResolveAmbigButton(interaction) {
   let memberCollection;
   try {
     memberCollection = await interaction.guild.members.fetch();
-  } catch {
-    return interaction.editReply({ content: '❌ Could not fetch guild members.' });
+  } catch (err) {
+    logger.error('syncResolve: guild.members.fetch failed:', err.message);
+    return interaction.editReply({ content: `❌ Could not fetch guild members: ${err.message}` });
   }
   const members = Array.from(memberCollection.values()).filter(m => !m.user?.bot);
   const audit = buildMemberMapAudit(members, players);
