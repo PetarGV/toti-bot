@@ -5,7 +5,7 @@ import { getTribe } from '../utils/tribes.js';
 import { logger } from '../utils/logger.js';
 
 const ACCEPTED_ROLE = 'Accepted';
-const IMPOSTER_ROLE = 'Imposter';
+const IMPOSTER_ROLE = 'TBD';
 
 function findRole(member, name) {
   const roles = member.guild.roles.cache;
