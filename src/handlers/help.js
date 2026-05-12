@@ -6,10 +6,11 @@ import { COLORS, FOOTER } from '../utils/i18n.js';
 
 const CATEGORIES = [
   { value: 'overview', label: 'Overview',                emoji: '📖', description: 'What the bot does' },
+  { value: 'setup',    label: 'Setup & Roles',           emoji: '🎖️', description: 'Onboarding, IGN linking, tribe & alliance roles' },
   { value: 'push',     label: 'Resource Push',           emoji: '📦', description: 'Request and pledge resources' },
   { value: 'combat',   label: 'Defense & Combat',        emoji: '⚔️', description: 'Defense, offense, reinforce, urgent' },
-  { value: 'scout',    label: 'Scout & Intel',           emoji: '👀', description: 'Request scouts, lookup villages' },
-  { value: 'profile',  label: 'Profile',                 emoji: '👤', description: 'Set your IGN, coords, tribe' },
+  { value: 'scout',    label: 'Scout & Intel',           emoji: '👀', description: 'Request scouts, lookup villages, nearby map' },
+  { value: 'profile',  label: 'Profile',                 emoji: '👤', description: 'View and edit your linked accounts and coords' },
   { value: 'status',   label: 'Status & Leaderboards',   emoji: '📊', description: 'Your dashboard and rankings' },
   { value: 'timer',    label: 'Personal Timer',          emoji: '⏱️', description: 'Recurring reminders for farming' },
 ];
@@ -25,8 +26,30 @@ const PAGES = {
       '• **Slash commands** — type `/` and pick from the menu\n\n' +
       'Pick a category from the dropdown below to see how each feature works.',
     fields: [
-      { name: '🚀 First time?',       value: 'Run `/profile` to set your in-game name, home coords, and tribe. Your home coords will then auto-fill destination fields.' },
-      { name: '💡 Quick tips',        value: '• Coords accept any of these: `(-12|34)`, `-12|34`, `-12/34`\n• Amounts accept shorthand: `5k` = 5000, `1.5m` = 1,500,000\n• Times accept: `14:30` (clock) or `in 2h30m` (relative)' },
+      { name: '🚀 First time?',  value: 'When you joined, the bot may have already linked your Travian account and assigned your tribe and alliance roles automatically. Check with `/profile`. If not, you\'ll see a **Start setup** button in the welcome channel — or run `/profile` yourself.' },
+      { name: '💡 Quick tips',   value: '• Coords accept any of these: `(-12|34)`, `-12|34`, `-12/34`\n• Amounts accept shorthand: `5k` = 5000, `1.5m` = 1,500,000\n• Times accept: `14:30` (clock) or `in 2h30m` (relative)' },
+    ],
+  },
+
+  setup: {
+    title: '🎖️ Setup & Roles',
+    color: COLORS.brand.primary,
+    description: 'How your Travian account gets linked to your Discord profile and how tribe + alliance roles are assigned.',
+    fields: [
+      { name: '🤖 Automatic on join',
+        value: 'When you join the server the bot checks if your Discord display name uniquely matches a Travian player on the map.\n' +
+               '• **Match found** — your IGN is linked instantly and your tribe + alliance roles are assigned. The welcome message will confirm this.\n' +
+               '• **No match / ambiguous** — you\'ll see a **🚀 Start setup** button. Step 1 asks for your exact in-game name.' },
+      { name: '✏️ Setting your IGN manually',
+        value: 'Click **🚀 Start setup** in the welcome channel, or run `/profile` → **Set IGN**.\n' +
+               'Type your exact Travian name. The bot finds it on the map and assigns your tribe and alliance roles right away.' },
+      { name: '🎖️ Tribe roles',
+        value: 'Assigned automatically based on the tribe of your Travian account:\n`Romans` · `Teutons` · `Gauls` · `Egyptians` · `Huns` · `Spartans`' },
+      { name: '✅ Alliance roles',
+        value: '• **Accepted** — your account is in the alliance\n• **Imposter** — your account is not in the alliance\nAssigned at the same time as your tribe role.' },
+      { name: '📍 Step 3 — Home coords',
+        value: 'After IGN and crew role, the wizard asks for your home village coords (e.g. `-12|34`).\n' +
+               'These auto-fill destination fields in push / combat / scout modals. Tribe role is confirmed again from the village.' },
     ],
   },
 
@@ -85,25 +108,27 @@ const PAGES = {
       { name: '🔍 Whois Lookup',
         value: '**Panel:** click 🔍 Whois Lookup · **Slash:** `/whois coords:<x|y>`\n' +
                'Returns the village owner, alliance, population, and tribe (when map data is loaded).' },
-      { name: '📌 Note',
-        value: 'Map data refreshes daily at 06:00. Some villages may be 24h stale.' },
+      { name: '📌 Nearby Map',
+        value: '**Panel:** click 📌 Nearby Map · **Slash:** `/nearby coords:<x|y> [radius] [limit]`\n' +
+               'Shows villages within `radius` fields (1–50, default 10), up to `limit` results (1–20, default 10).' },
+      { name: '🗓️ Map freshness',
+        value: 'Map data refreshes daily at 06:00. Some villages may be up to 24h stale.' },
     ],
   },
 
   profile: {
     title: '👤 Your Profile',
     color: COLORS.brand.primary,
-    description: 'Set your in-game name, home coords, and tribe so the bot can auto-fill modals and tag you in DMs.',
+    description: 'View your linked Travian account, home coords, crew role, and notification settings. Run `/profile` to open the menu.',
     fields: [
-      { name: '🚀 Open the menu',
-        value: 'Run `/profile` — an ephemeral menu only you can see.' },
-      { name: '✏️ Set IGN',
-        value: 'Click **Set IGN** → type your in-game name → submit.' },
-      { name: '📍 Set Coords',
-        value: 'Click **Set Coords** → enter your main village coords (e.g. `-12|34`).\n' +
+      { name: '✏️ IGN',
+        value: 'Your linked Travian in-game name is shown here. To change it click **Edit IGN**.\n' +
+               'Setting your IGN automatically assigns your tribe and alliance roles.' },
+      { name: '📍 Home coords',
+        value: 'Click **Edit Coords** and enter your main village coords (e.g. `-12|34`).\n' +
                'These auto-fill the destination field in push / combat / scout modals.' },
-      { name: '🏳️ Set Tribe',
-        value: 'Pick from the **dropdown** — Romans / Teutons / Gauls / Egyptians / Huns / Spartans.' },
+      { name: '🎖️ Tribe & alliance roles',
+        value: 'Assigned automatically when your IGN is linked — you don\'t need to set them manually. See **Setup & Roles** for details.' },
       { name: '🔔 DM notifications',
         value: 'Click the **DMs** button to toggle. When ON, you\'ll receive a DM each time someone pledges to a call you authored.' },
     ],
