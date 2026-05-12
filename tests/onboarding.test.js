@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupTestDb, resetTables } from './helpers/testDb.js';
 import { prepare } from '../src/db/client.js';
-import { getNextStep, applyCoordsAndDeriveTribe, buildWizardPayload } from '../src/handlers/onboarding.js';
+import { getNextStep, applyCoordsAndDeriveTribe, buildWizardPayload, buildWelcomePayload } from '../src/handlers/onboarding.js';
 import { setUserIgnFromInput, getPrimaryLinkForUser } from '../src/handlers/userIgnLinks.js';
 import { setAccountCoords } from '../src/handlers/travianAccounts.js';
 
@@ -222,4 +222,20 @@ test('buildWizardPayload "done" returns a celebratory message and no action butt
   const payload = buildWizardPayload({ step: 'done', discordId: '111' });
   assert.match(payload.content, /all set/i);
   assert.equal(payload.components.length, 0);
+});
+
+test('buildWelcomePayload pings the new member and exposes a Start setup button', () => {
+  const payload = buildWelcomePayload({ memberId: '777', rolesPanelUrl: null });
+  assert.match(payload.content, /<@777>/);
+  const startBtn = payload.components[0].toJSON().components[0];
+  assert.equal(startBtn.custom_id, 'onboard:start:777');
+  assert.equal(startBtn.label, '🚀 Start setup');
+});
+
+test('buildWelcomePayload includes a link to the roles panel when available', () => {
+  const payload = buildWelcomePayload({
+    memberId: '777',
+    rolesPanelUrl: 'https://discord.com/channels/g/c/m',
+  });
+  assert.match(payload.content, /https:\/\/discord\.com\/channels\/g\/c\/m/);
 });

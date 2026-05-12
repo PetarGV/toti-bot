@@ -1,6 +1,6 @@
 import { CREW_ROLE_NAMES, ROLE_SELECTIONS, ROLE_BUTTON_PREFIX } from '../utils/roleSelection.js';
 import { getPrimaryLinkForUser, setUserIgnFromInput } from './userIgnLinks.js';
-import { prepare } from '../db/client.js';
+import { prepare, getConfig } from '../db/client.js';
 import { parseCoords } from '../utils/coords.js';
 import { setAccountCoords, setAccountTribe } from './travianAccounts.js';
 import { buildTribeRolePlan } from '../utils/tribeRoles.js';
@@ -207,6 +207,64 @@ export async function handleOnboardSetCoordsButton(interaction) {
     .setMaxLength(20);
   modal.addComponents(new ActionRowBuilder().addComponents(input));
   await interaction.showModal(modal);
+}
+
+export function buildWelcomePayload({ memberId, rolesPanelUrl }) {
+  const lines = [
+    `👋 Welcome <@${memberId}>!`,
+    '',
+    'Hit **🚀 Start setup** below for a quick 3-step walkthrough (IGN → crew role → home coords).',
+    'Or run `/profile` and `/help` to do it yourself.',
+  ];
+  if (rolesPanelUrl) {
+    lines.push(`Crew roles panel: ${rolesPanelUrl}`);
+  }
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`onboard:start:${memberId}`)
+      .setStyle(ButtonStyle.Success)
+      .setLabel('🚀 Start setup'),
+  );
+  return {
+    content: lines.join('\n'),
+    components: [row],
+    allowedMentions: { users: [memberId] },
+  };
+}
+
+function getRolesPanelUrl(guildId) {
+  const panel = prepare(`SELECT channel_id, message_id FROM panels WHERE type = 'roles'`).get();
+  if (!panel) return null;
+  return `https://discord.com/channels/${guildId}/${panel.channel_id}/${panel.message_id}`;
+}
+
+export async function handleGuildMemberAdd(member) {
+  if (member.user?.bot) return;
+  const channelId = getConfig('welcome_channel_id');
+  if (!channelId) {
+    logger.warn('guildMemberAdd: welcome_channel_id not configured — skipping greeting');
+    return;
+  }
+  let channel;
+  try {
+    channel = await member.guild.channels.fetch(channelId);
+  } catch (err) {
+    logger.error(`guildMemberAdd: cannot fetch welcome channel ${channelId}: ${err.message}`);
+    return;
+  }
+  if (!channel?.isTextBased?.()) {
+    logger.error(`guildMemberAdd: configured welcome channel ${channelId} isn't text-based`);
+    return;
+  }
+  const payload = buildWelcomePayload({
+    memberId: member.id,
+    rolesPanelUrl: getRolesPanelUrl(member.guild.id),
+  });
+  try {
+    await channel.send(payload);
+  } catch (err) {
+    logger.error(`guildMemberAdd: failed to send welcome to ${channelId}: ${err.message}`);
+  }
 }
 
 export async function handleOnboardSaveCoordsModal(interaction) {

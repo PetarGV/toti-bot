@@ -12,6 +12,7 @@ import { startBackupJob } from './jobs/backup.js';
 import { startTimerTickJob } from './jobs/timerTick.js';
 import { startHealthServer, stopHealthServer } from './server/health.js';
 import { routeCommand, routeButton, routeModal, routeSelect } from './handlers/router.js';
+import { handleGuildMemberAdd } from './handlers/onboarding.js';
 import { refreshOpenCalls } from './handlers/calls.js';
 import { logger, flushLogs } from './utils/logger.js';
 import { recordError } from './utils/metrics.js';
@@ -56,6 +57,15 @@ client.on('interactionCreate', async (interaction) => {
   if (interaction.isButton())               return routeButton(interaction);
   if (interaction.isStringSelectMenu?.())   return routeSelect(interaction);
   if (interaction.type === InteractionType.ModalSubmit) return routeModal(interaction);
+});
+
+client.on(Events.GuildMemberAdd, async (member) => {
+  try {
+    await handleGuildMemberAdd(member);
+  } catch (err) {
+    logger.error('guildMemberAdd handler crashed:', err);
+    recordError(err);
+  }
 });
 
 let shuttingDown = false;
