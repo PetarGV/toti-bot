@@ -2,7 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import { existsSync, readFileSync, statSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
-import { setConfig, getConfig, exec, prepare, flushDb } from '../db/client.js';
+import { setConfig, getConfig, exec, prepare, transaction, flushDb } from '../db/client.js';
 import { deployPanel } from '../panel/deploy.js';
 import { fetchMap } from '../jobs/mapFetch.js';
 import { backupNow } from '../jobs/backup.js';
@@ -15,7 +15,9 @@ import {
   getTravianPlayersFromMap,
   normalizeNameForMatch,
 } from '../utils/memberMapMonitor.js';
-import { adminLink, adminUnlink, adminSetPrimary } from '../handlers/userIgnLinks.js';
+import { adminLink, adminUnlink, adminSetPrimary, getAllLinksForUser, getPrimaryLinkForUser } from '../handlers/userIgnLinks.js';
+import { upsertAccountFromMap } from '../handlers/travianAccounts.js';
+import { normalizeIgn } from '../utils/ign.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH  = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
@@ -45,38 +47,41 @@ function conflictLine(row) {
   return `<@${row.member.id}> has profile **${row.existingIgn}**, matched **${row.player.player}**`;
 }
 
-function applyMemberMapProfileMatches(audit) {
-  const profiles = new Map(
-    prepare('SELECT discord_id, ign FROM users').all()
-      .map(row => [row.discord_id, row.ign]),
-  );
-
-  const upsert = prepare(`
-    INSERT INTO users (discord_id, ign)
-    VALUES (?, ?)
-    ON CONFLICT(discord_id) DO UPDATE SET
-      ign = excluded.ign
-    WHERE users.ign IS NULL OR users.ign = ''
-  `);
-
+export function applyMemberMapProfileMatches(audit) {
   const updated = [];
   const alreadyLinked = [];
   const conflicts = [];
 
   for (const row of audit.matched) {
-    const existingIgn = profiles.get(row.member.id) ?? null;
-    const normalizedExisting = normalizeNameForMatch(existingIgn);
+    const discordId = row.member.id;
+    const ign = row.player.player;
+    const normalizedIgnInput = row.player.normalizedName ?? normalizeIgn(ign);
 
-    if (normalizedExisting) {
-      if (normalizedExisting === row.player.normalizedName) {
-        alreadyLinked.push(row);
-      } else {
-        conflicts.push({ ...row, existingIgn });
-      }
+    const links = getAllLinksForUser(discordId);
+
+    // Already linked to this exact account?
+    if (links.some(l => l.normalized_ign === normalizedIgnInput)) {
+      alreadyLinked.push(row);
       continue;
     }
 
-    upsert.run(row.member.id, row.player.player);
+    // Any other link? Then sync doesn't override — flag conflict.
+    if (links.length > 0) {
+      const primary = getPrimaryLinkForUser(discordId);
+      conflicts.push({ ...row, existingIgn: primary?.ign ?? links[0].ign });
+      continue;
+    }
+
+    // No links yet — create account + primary sync link.
+    const run = transaction(() => {
+      prepare('INSERT OR IGNORE INTO users (discord_id) VALUES (?)').run(discordId);
+      upsertAccountFromMap(ign);
+      prepare(`
+        INSERT INTO user_ign_links (discord_id, ign, is_primary, source)
+        VALUES (?, ?, 1, 'sync')
+      `).run(discordId, ign);
+    });
+    run();
     updated.push(row);
   }
 
