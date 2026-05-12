@@ -168,3 +168,16 @@ test('getUsersByIgn returns all Discord users linked to that ign', async () => {
   const users = getUsersByIgn('main').map(u => u.discord_id).sort();
   assert.deepEqual(users, ['111', '222']);
 });
+
+test('utils/ign.js re-exports stay in sync with userIgnLinks', async () => {
+  await setupTestDb();
+  resetTables();
+  const utilsIgn = await import('../src/utils/ign.js');
+  seed('111');
+  seedMap([{ id: 1, x: 0, y: 0, player: 'Main', uid: 10 }]);
+  setUserIgnFromInput('111', 'Main');
+
+  // Same shape as the canonical exports.
+  const fromUtils = utilsIgn.getUsersByIgn('main').map(u => u.discord_id);
+  assert.deepEqual(fromUtils, ['111']);
+});
