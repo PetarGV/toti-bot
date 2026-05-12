@@ -13,7 +13,6 @@ import { logger } from '../utils/logger.js';
 import {
   buildMemberMapAudit,
   getTravianPlayersFromMap,
-  normalizeNameForMatch,
 } from '../utils/memberMapMonitor.js';
 import { adminLink, adminUnlink, adminSetPrimary, getAllLinksForUser, getPrimaryLinkForUser } from '../handlers/userIgnLinks.js';
 import { upsertAccountFromMap } from '../handlers/travianAccounts.js';
