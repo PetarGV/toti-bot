@@ -106,12 +106,17 @@ export async function updateOnboardingChannelTopic(discordId, ign, guild) {
   }
 }
 
+// Returns true if the channel was successfully flagged (renamed + alert sent),
+// false if there was no onboarding channel or the operation failed.
+// Callers should not use this return value to decide whether to *report* the
+// transition — many members have no onboarding channel and we still want
+// leadership to know about their role changes.
 export async function flagOnboardingChannel(discordId, reason, guild) {
   const row = prepare('SELECT onboarding_channel_id FROM users WHERE discord_id = ?').get(discordId);
-  if (!row?.onboarding_channel_id) return;
+  if (!row?.onboarding_channel_id) return false;
   try {
     const channel = await guild.channels.fetch(row.onboarding_channel_id).catch(() => null);
-    if (!channel) return;
+    if (!channel) return false;
 
     const currentName = channel.name ?? '';
     if (!currentName.startsWith('review-')) {
@@ -129,8 +134,10 @@ export async function flagOnboardingChannel(discordId, reason, guild) {
     });
 
     logger.info(`flagOnboardingChannel: flagged ${discordId} — ${reason}`);
+    return true;
   } catch (err) {
     logger.warn(`flagOnboardingChannel: ${discordId}: ${err.message}`);
+    return false;
   }
 }
 

@@ -11,13 +11,14 @@ import { renameOnboardingChannel, flagOnboardingChannel } from '../handlers/onbo
 import { getPrimaryGuild, getNotificationsChannel } from '../utils/guild.js';
 import { unixNow } from '../utils/time.js';
 
-// Refresh roles for a single (member, ign) pair and flag the onboarding
-// channel if the member just transitioned to TBD or if their IGN has
-// vanished from x_world.
+// Refresh roles for a single (member, ign) pair and report whether the
+// member transitioned to TBD or whose IGN has vanished from x_world.
 //
-// Returns: { rolesAssigned, flaggedTbd, flaggedMissingIgn }
-//   flaggedTbd / flaggedMissingIgn are booleans — true only when the channel
-//   was newly flagged (idempotent: already-flagged channels return false).
+// Returns: { rolesAssigned, transitionedToTbd, ignMissingFromMap }
+//   The two boolean flags track the *role transition itself*, not whether
+//   the onboarding channel was successfully flagged. Many older members
+//   have no onboarding channel, but their TBD transitions still need to be
+//   reported. Channel flagging is a best-effort side-effect.
 //
 // checkMapPresence=true for the "all-primary-links" loop where the IGN may
 // have disappeared from the map. Skip it for audit-matched rows since those
@@ -28,30 +29,31 @@ export async function refreshSyncMember({ member, ign, guild, checkMapPresence }
       'SELECT 1 FROM x_world WHERE player IS NOT NULL AND lower(player) = lower(?) LIMIT 1',
     ).get(ign);
     if (!exists) {
-      const did = await flagOnboardingChannel(
+      await flagOnboardingChannel(
         member.id,
         `**${ign}** is no longer in the map data (account deleted or wiped)`,
         guild,
       );
-      return { rolesAssigned: false, flaggedTbd: false, flaggedMissingIgn: did };
+      return { rolesAssigned: false, transitionedToTbd: false, ignMissingFromMap: true };
     }
   }
 
   try {
     const roles = await assignRolesFromIgn({ member, ign });
     const rolesAssigned = roles.tribeAssigned || roles.allianceAssigned;
-    let flaggedTbd = false;
+    let transitionedToTbd = false;
     if (roles.allianceAssigned && roles.allianceRoleName === 'TBD') {
-      flaggedTbd = await flagOnboardingChannel(
+      transitionedToTbd = true;
+      await flagOnboardingChannel(
         member.id,
         `**${ign}** moved to **TBD** — no longer in the alliance`,
         guild,
       );
     }
-    return { rolesAssigned, flaggedTbd, flaggedMissingIgn: false };
+    return { rolesAssigned, transitionedToTbd, ignMissingFromMap: false };
   } catch (err) {
     logger.warn(`refreshSyncMember: ${member.id} / ${ign}: ${err.message}`);
-    return { rolesAssigned: false, flaggedTbd: false, flaggedMissingIgn: false };
+    return { rolesAssigned: false, transitionedToTbd: false, ignMissingFromMap: false };
   }
 }
 
@@ -72,7 +74,7 @@ export async function applyMemberSyncRoles({ guild, memberCollection, members, p
       checkMapPresence: false,
     });
     if (r.rolesAssigned) rolesAssigned++;
-    if (r.flaggedTbd) {
+    if (r.transitionedToTbd) {
       flaggedTbd.push({
         discordId: row.member.id,
         displayName: row.member.displayName,
@@ -106,14 +108,14 @@ export async function applyMemberSyncRoles({ guild, memberCollection, members, p
       checkMapPresence: true,
     });
     if (r.rolesAssigned) rolesAssigned++;
-    if (r.flaggedTbd) {
+    if (r.transitionedToTbd) {
       flaggedTbd.push({
         discordId: discordMember.id,
         displayName: discordMember.displayName,
         ign: link.ign,
       });
     }
-    if (r.flaggedMissingIgn) {
+    if (r.ignMissingFromMap) {
       flaggedMissingIgn.push({
         discordId: discordMember.id,
         displayName: discordMember.displayName,
