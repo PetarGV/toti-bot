@@ -24,6 +24,14 @@ export function runMigrations() {
     }
   }
 
+  if (!hasColumn('users', 'onboarding_channel_id')) {
+    try {
+      exec('ALTER TABLE users ADD COLUMN onboarding_channel_id TEXT');
+    } catch (err) {
+      logger.warn('Migration users.onboarding_channel_id skipped:', err.message);
+    }
+  }
+
   if (!hasColumn('panels', 'restore_failed_at')) {
     try {
       exec('ALTER TABLE panels ADD COLUMN restore_failed_at INTEGER');

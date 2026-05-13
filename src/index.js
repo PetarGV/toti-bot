@@ -10,6 +10,7 @@ import { startMapFetchJob } from './jobs/mapFetch.js';
 import { startExpiryJob } from './jobs/expiry.js';
 import { startBackupJob } from './jobs/backup.js';
 import { startTimerTickJob } from './jobs/timerTick.js';
+import { startMemberSyncJob } from './jobs/memberSync.js';
 import { startHealthServer, stopHealthServer } from './server/health.js';
 import { routeCommand, routeButton, routeModal, routeSelect } from './handlers/router.js';
 import { handleGuildMemberAdd } from './handlers/onboarding.js';
@@ -36,6 +37,7 @@ client.once('clientReady', async () => {
   startExpiryJob(client);
   startBackupJob();
   startTimerTickJob(client);
+  startMemberSyncJob(client);
 });
 
 client.on(Events.ShardDisconnect, (event, shardId) => {

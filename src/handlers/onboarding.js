@@ -61,11 +61,33 @@ async function createMemberOnboardingChannel(member) {
       parent: categoryId,
       permissionOverwrites,
     });
+    prepare('INSERT OR IGNORE INTO users (discord_id) VALUES (?)').run(member.id);
+    prepare('UPDATE users SET onboarding_channel_id = ? WHERE discord_id = ?').run(channel.id, member.id);
     logger.info(`guildMemberAdd: created private channel #${channelName} for ${member.user.tag}`);
     return channel;
   } catch (err) {
     logger.error(`guildMemberAdd: failed to create onboarding channel for ${member.user.tag}: ${err.message}`);
     return null;
+  }
+}
+
+function safeChannelName(ign) {
+  return ign
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 100) || 'member';
+}
+
+export async function renameOnboardingChannel(discordId, ign, guild) {
+  const row = prepare('SELECT onboarding_channel_id FROM users WHERE discord_id = ?').get(discordId);
+  if (!row?.onboarding_channel_id) return;
+  try {
+    const channel = await guild.channels.fetch(row.onboarding_channel_id);
+    if (channel) await channel.setName(safeChannelName(ign));
+  } catch (err) {
+    logger.warn(`renameOnboardingChannel: ${discordId} → ${ign}: ${err.message}`);
   }
 }
 
@@ -239,6 +261,9 @@ export async function handleOnboardSaveIgnModal(interaction) {
     if (roles.tribeAssigned) parts.push(`tribe role **${roles.tribeName}**`);
     if (roles.allianceAssigned) parts.push(`**${roles.allianceRoleName}** role`);
     if (parts.length) roleNote = ` ${parts.join(' and ')} assigned.`;
+    if (interaction.guild) {
+      await renameOnboardingChannel(interaction.user.id, result.canonical, interaction.guild);
+    }
   }
   return interaction.reply({ content: `✅ IGN set to **${result.canonical}**.${roleNote} Click **Continue ➡** on the wizard to move to Step 2.`, ephemeral: true });
 }
@@ -319,6 +344,15 @@ export async function handleGuildMemberAdd(member) {
 
   // Create private onboarding channel if a category is configured
   const privateChannel = await createMemberOnboardingChannel(member);
+
+  // Rename immediately to the IGN if we already know it
+  if (privateChannel && autoIgn) {
+    try {
+      await privateChannel.setName(safeChannelName(autoIgn));
+    } catch (err) {
+      logger.warn(`guildMemberAdd: could not rename onboarding channel to IGN: ${err.message}`);
+    }
+  }
 
   const payload = buildWelcomePayload({
     memberId: member.id,
