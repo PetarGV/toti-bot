@@ -205,6 +205,7 @@ The 12-hourly **member sync job** ([AUTOMATIONS.md](AUTOMATIONS.md)) interacts w
 | New auto-matchable member (no existing link)  | Same as join: link, assign roles, **rename onboarding channel** to the IGN     |
 | Existing linked member, alliance role changed | Re-assign alliance role; if new role is `TBD`, **flag channel for review**     |
 | Existing linked member, IGN gone from x\_world | **Flag channel** (`account deleted or wiped`) — skip role assignment            |
+| Member with `TBD` role but no IGN link        | List them in the sync embed under **🚨 Unlinked TBDs** so leadership can `/admin link` or `/admin sync-exclude` them |
 | Excluded member (`/admin sync-exclude`)       | Skipped entirely — never auto-linked, never flagged                            |
 
 The sync ignores members in `sync_exclusions` so leadership, sitters, or out-of-alliance test accounts don't get processed.

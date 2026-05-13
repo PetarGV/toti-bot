@@ -6,7 +6,7 @@ import { COLORS, FOOTER } from '../utils/i18n.js';
 import { getTravianPlayersFromMap, buildMemberMapAudit } from '../utils/memberMapMonitor.js';
 import { getPrimaryLinkForUser } from '../handlers/userIgnLinks.js';
 import { applyMemberMapProfileMatches } from '../commands/admin.js';
-import { assignRolesFromIgn } from '../handlers/memberRoles.js';
+import { assignRolesFromIgn, findUnlinkedTbds } from '../handlers/memberRoles.js';
 import { renameOnboardingChannel, flagOnboardingChannel } from '../handlers/onboarding.js';
 import { getPrimaryGuild, getNotificationsChannel } from '../utils/guild.js';
 import { unixNow } from '../utils/time.js';
@@ -97,14 +97,21 @@ export async function runMemberSync(client) {
     }
   }
 
+  const unlinkedTbds = findUnlinkedTbds(guild, members);
+
   setConfig('last_sync_at', unixNow());
 
   logger.info(
     `memberSync: ${audit.matched.length} matched, ${profileSync.updated.length} new links, ` +
-    `${rolesAssigned} roles assigned, ${flaggedCount} flagged, ${unresolvedAmbiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
+    `${rolesAssigned} roles assigned, ${flaggedCount} flagged, ${unresolvedAmbiguous.length} ambiguous, ` +
+    `${unlinkedTbds.length} unlinked TBDs, ${audit.unmatched.length} unmatched`,
   );
 
-  const hasChanges = profileSync.updated.length > 0 || rolesAssigned > 0 || flaggedCount > 0;
+  const hasChanges =
+    profileSync.updated.length > 0 ||
+    rolesAssigned > 0 ||
+    flaggedCount > 0 ||
+    unlinkedTbds.length > 0;
   if (!hasChanges) return;
 
   const notifChannel = getNotificationsChannel(guild);
@@ -118,13 +125,14 @@ export async function runMemberSync(client) {
   );
 
   const embed = new EmbedBuilder()
-    .setColor(flaggedCount > 0 ? COLORS.call.defense : COLORS.brand.info)
+    .setColor((flaggedCount > 0 || unlinkedTbds.length > 0) ? COLORS.call.defense : COLORS.brand.info)
     .setTitle('🔄 Scheduled Member Sync')
     .addFields(
-      { name: 'New Links',      value: String(profileSync.updated.length), inline: true },
-      { name: 'Roles Assigned', value: String(rolesAssigned),              inline: true },
-      { name: 'Ambiguous',      value: String(unresolvedAmbiguous.length), inline: true },
-      { name: '⚠️ Flagged',     value: String(flaggedCount),               inline: true },
+      { name: 'New Links',         value: String(profileSync.updated.length), inline: true },
+      { name: 'Roles Assigned',    value: String(rolesAssigned),              inline: true },
+      { name: 'Ambiguous',         value: String(unresolvedAmbiguous.length), inline: true },
+      { name: '⚠️ Flagged',        value: String(flaggedCount),               inline: true },
+      { name: '🚨 Unlinked TBDs',  value: String(unlinkedTbds.length),        inline: true },
     )
     .setFooter({ text: FOOTER })
     .setTimestamp();
@@ -133,6 +141,16 @@ export async function runMemberSync(client) {
     const shown = lines.slice(0, 10);
     const extra = lines.length > 10 ? `\n…and ${lines.length - 10} more` : '';
     embed.addFields({ name: 'Newly Linked', value: shown.join('\n') + extra });
+  }
+
+  if (unlinkedTbds.length) {
+    const tbdLines = unlinkedTbds.map(m => `<@${m.id}> (${m.displayName})`);
+    const shown = tbdLines.slice(0, 10);
+    const extra = tbdLines.length > 10 ? `\n…and ${tbdLines.length - 10} more` : '';
+    embed.addFields({
+      name: '🚨 Unlinked TBDs (no IGN link)',
+      value: shown.join('\n') + extra + '\n*Use `/admin link` to link or `/admin sync-exclude` to skip them in future runs.*',
+    });
   }
 
   try {

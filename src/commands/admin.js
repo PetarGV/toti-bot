@@ -19,7 +19,7 @@ import { upsertAccountFromMap } from '../handlers/travianAccounts.js';
 import { buildSyncResolveButtons } from '../handlers/syncResolve.js';
 import { normalizeIgn } from '../utils/ign.js';
 import { applyCoordsAndDeriveTribe } from '../handlers/onboarding.js';
-import { assignRolesFromIgn } from '../handlers/memberRoles.js';
+import { assignRolesFromIgn, findUnlinkedTbds } from '../handlers/memberRoles.js';
 import { CREW_ROLE_NAMES } from '../utils/roleSelection.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -212,8 +212,10 @@ export async function handleAdmin(interaction) {
       }
     }
 
+    const unlinkedTbds = findUnlinkedTbds(interaction.guild, members);
+
     const embed = new EmbedBuilder()
-      .setColor(COLORS.brand.info)
+      .setColor(unlinkedTbds.length > 0 ? COLORS.call.defense : COLORS.brand.info)
       .setTitle('Discord Member Map Sync')
       .setDescription(
         updateProfiles
@@ -230,6 +232,7 @@ export async function handleAdmin(interaction) {
         { name: 'Profile Conflicts', value: String(profileSync.conflicts.length), inline: true },
         { name: 'Ambiguous',        value: String(unresolvedAmbiguous.length), inline: true },
         { name: 'Unmatched',        value: String(audit.unmatched.length), inline: true },
+        { name: '🚨 Unlinked TBDs', value: String(unlinkedTbds.length), inline: true },
       )
       .setFooter({ text: 'Matching ignores case, spaces, punctuation, symbols, and accents.' })
       .setTimestamp();
@@ -272,9 +275,19 @@ export async function handleAdmin(interaction) {
       });
     }
 
+    if (unlinkedTbds.length) {
+      embed.addFields({
+        name: '🚨 Unlinked TBDs (no IGN link)',
+        value: firstLines(unlinkedTbds.map(m => `<@${m.id}> (${m.displayName})`))
+          + '\n*Use `/admin link` to link or `/admin sync-exclude` to skip them in future runs.*',
+        inline: false,
+      });
+    }
+
     logger.info(
       `Member sync by ${interaction.user.tag}: ${audit.matched.length} matched, ` +
-      `${profileSync.updated.length} updated, ${unresolvedAmbiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
+      `${profileSync.updated.length} updated, ${unresolvedAmbiguous.length} ambiguous, ` +
+      `${unlinkedTbds.length} unlinked TBDs, ${audit.unmatched.length} unmatched`,
     );
 
     const resolveRow = buildSyncResolveButtons({

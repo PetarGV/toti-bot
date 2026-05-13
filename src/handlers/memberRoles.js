@@ -7,6 +7,18 @@ import { logger } from '../utils/logger.js';
 const ACCEPTED_ROLE = 'Accepted';
 const IMPOSTER_ROLE = 'TBD';
 
+// Members with the TBD role but no row in user_ign_links. They slip past
+// the name-match audit and the link-refresh loop, so they're invisible to
+// the rest of the sync. Surface them so leadership can link or exclude.
+export function findUnlinkedTbds(guild, members) {
+  const tbdRole = guild.roles.cache.find(r => r.name === IMPOSTER_ROLE);
+  if (!tbdRole) return [];
+  const linkedIds = new Set(
+    prepare('SELECT DISTINCT discord_id FROM user_ign_links').all().map(r => r.discord_id),
+  );
+  return members.filter(m => m.roles.cache.has(tbdRole.id) && !linkedIds.has(m.id));
+}
+
 function findRole(member, name) {
   const roles = member.guild.roles.cache;
   if (typeof roles.find === 'function') return roles.find(r => r.name === name);
