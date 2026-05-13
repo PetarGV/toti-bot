@@ -65,20 +65,35 @@ export async function applyMemberSyncRoles({ guild, memberCollection, members, p
   const flaggedTbd = [];          // [{ discordId, displayName, ign }]
   const flaggedMissingIgn = [];   // same shape
 
-  // Loop 1: audit-matched + already-linked rows
+  // Loop 1: audit-matched + already-linked rows.
+  //
+  // Prefer the user's PRIMARY ign over the audit match. The audit matches
+  // on "Discord display name CONTAINS player name" which can hit the wrong
+  // account when names overlap — e.g. display "ZoDiack" contains "Dia"
+  // but not "ZoDiak", so a dual-account player whose real main is ZoDiak
+  // would otherwise get role-assigned based on Dia.
   for (const row of [...profileSync.updated, ...profileSync.alreadyLinked]) {
+    const primary = getPrimaryLinkForUser(row.member.id);
+    const ign = primary?.ign ?? row.player.player;
     const r = await refreshSyncMember({
       member: row.member,
-      ign: row.player.player,
+      ign,
       guild,
-      checkMapPresence: false,
+      checkMapPresence: true,
     });
     if (r.rolesAssigned) rolesAssigned++;
     if (r.transitionedToTbd) {
       flaggedTbd.push({
         discordId: row.member.id,
         displayName: row.member.displayName,
-        ign: row.player.player,
+        ign,
+      });
+    }
+    if (r.ignMissingFromMap) {
+      flaggedMissingIgn.push({
+        discordId: row.member.id,
+        displayName: row.member.displayName,
+        ign,
       });
     }
   }
