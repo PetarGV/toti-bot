@@ -8,6 +8,7 @@ import { upsertAccountFromMap, validateIgnAgainstMap } from './travianAccounts.j
 import { normalizeIgn } from '../utils/ign.js';
 import { buildMemberMapAudit, getTravianPlayersFromMap } from '../utils/memberMapMonitor.js';
 import { assignRolesFromIgn } from './memberRoles.js';
+import { renameOnboardingChannel } from './onboarding.js';
 import { logger } from '../utils/logger.js';
 
 export function buildSyncResolveButtons({ adminId, conflicts, ambiguous }) {
@@ -268,6 +269,9 @@ export async function handleAmbigIgnModal(interaction) {
       if (roles.allianceAssigned) parts.push(`**${roles.allianceRoleName}** role`);
       if (parts.length) roleNote = ` ${parts.join(' and ')} assigned.`;
     }
+    if (interaction.guild) {
+      await renameOnboardingChannel(discordId, pickedIgn, interaction.guild);
+    }
     return interaction.reply({ content: `✅ Linked <@${discordId}> → **${pickedIgn}**.${roleNote}`, ephemeral: true });
   }
   const row = new ActionRowBuilder().addComponents(
@@ -309,6 +313,9 @@ export async function handleActButton(interaction) {
       if (roles.tribeAssigned) parts.push(`tribe role **${roles.tribeName}**`);
       if (roles.allianceAssigned) parts.push(`**${roles.allianceRoleName}** role`);
       if (parts.length) roleNote = ` ${parts.join(' and ')} assigned.`;
+    }
+    if (interaction.guild) {
+      await renameOnboardingChannel(discordId, targetIgn, interaction.guild);
     }
   }
   return interaction.update({
