@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, PermissionFlagsBits } from 'discord.js';
+import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 
 export const commandDefinitions = [
   // ── Admin ───────────────────────────────────────────────────────────────
@@ -64,6 +64,16 @@ export const commandDefinitions = [
       s.setName('set-welcome-channel')
         .setDescription('Set the channel where new members get the onboarding greeting')
         .addChannelOption(o => o.setName('channel').setDescription('Welcome channel').setRequired(true))
+    )
+    .addSubcommand(s =>
+      s.setName('set-onboarding-category')
+        .setDescription('Set the category where a private channel is created for each new member')
+        .addChannelOption(o =>
+          o.setName('category')
+            .setDescription('Category to create private channels in')
+            .setRequired(true)
+            .addChannelTypes(ChannelType.GuildCategory)
+        )
     )
     .addSubcommand(s =>
       s.setName('set-coords')

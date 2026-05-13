@@ -6,7 +6,68 @@ import { setAccountCoords, upsertAccountFromMap } from './travianAccounts.js';
 import { matchMemberToPlayer, getTravianPlayersFromMap } from '../utils/memberMapMonitor.js';
 import { assignRolesFromIgn } from './memberRoles.js';
 import { logger } from '../utils/logger.js';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import {
+  ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder,
+  TextInputBuilder, TextInputStyle, ChannelType, PermissionFlagsBits,
+} from 'discord.js';
+
+const LEADERSHIP_ROLE_NAMES = ['Cesar', 'Imperators'];
+
+async function createMemberOnboardingChannel(member) {
+  const categoryId = getConfig('onboarding_category_id');
+  if (!categoryId) return null;
+
+  const safeName = member.displayName
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 90) || 'member';
+  const channelName = `welcome-${safeName}`;
+
+  const leadershipRoles = LEADERSHIP_ROLE_NAMES
+    .map(name => member.guild.roles.cache.find(r => r.name === name))
+    .filter(Boolean);
+
+  const permissionOverwrites = [
+    { id: member.guild.roles.everyone, deny: [PermissionFlagsBits.ViewChannel] },
+    {
+      id: member.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks,
+      ],
+    },
+    ...leadershipRoles.map(role => ({
+      id: role.id,
+      allow: [
+        PermissionFlagsBits.ViewChannel,
+        PermissionFlagsBits.SendMessages,
+        PermissionFlagsBits.ReadMessageHistory,
+        PermissionFlagsBits.ManageMessages,
+        PermissionFlagsBits.AttachFiles,
+        PermissionFlagsBits.EmbedLinks,
+      ],
+    })),
+  ];
+
+  try {
+    const channel = await member.guild.channels.create({
+      name: channelName,
+      type: ChannelType.GuildText,
+      parent: categoryId,
+      permissionOverwrites,
+    });
+    logger.info(`guildMemberAdd: created private channel #${channelName} for ${member.user.tag}`);
+    return channel;
+  } catch (err) {
+    logger.error(`guildMemberAdd: failed to create onboarding channel for ${member.user.tag}: ${err.message}`);
+    return null;
+  }
+}
 
 function hasCrewRole(memberRoleNames) {
   const lowered = new Set((memberRoleNames ?? []).map(n => String(n).trim().toLowerCase()));
@@ -256,32 +317,45 @@ export async function handleGuildMemberAdd(member) {
     }
   }
 
-  const channelId = getConfig('welcome_channel_id');
-  if (!channelId) {
-    logger.warn('guildMemberAdd: welcome_channel_id not configured — skipping greeting');
-    return;
-  }
-  let channel;
-  try {
-    channel = await member.guild.channels.fetch(channelId);
-  } catch (err) {
-    logger.error(`guildMemberAdd: cannot fetch welcome channel ${channelId}: ${err.message}`);
-    return;
-  }
-  if (!channel?.isTextBased?.()) {
-    logger.error(`guildMemberAdd: configured welcome channel ${channelId} isn't text-based`);
-    return;
-  }
+  // Create private onboarding channel if a category is configured
+  const privateChannel = await createMemberOnboardingChannel(member);
+
   const payload = buildWelcomePayload({
     memberId: member.id,
     rolesPanelUrl: getRolesPanelUrl(member.guild.id),
     autoIgn,
     autoRoles,
   });
-  try {
-    await channel.send(payload);
-  } catch (err) {
-    logger.error(`guildMemberAdd: failed to send welcome to ${channelId}: ${err.message}`);
+
+  if (privateChannel) {
+    try {
+      await privateChannel.send(payload);
+    } catch (err) {
+      logger.error(`guildMemberAdd: failed to send welcome to private channel: ${err.message}`);
+    }
+  }
+
+  // Also post a brief ping in the public welcome channel if configured
+  const channelId = getConfig('welcome_channel_id');
+  if (channelId) {
+    let publicChannel;
+    try {
+      publicChannel = await member.guild.channels.fetch(channelId);
+    } catch (err) {
+      logger.error(`guildMemberAdd: cannot fetch welcome channel ${channelId}: ${err.message}`);
+    }
+    if (publicChannel?.isTextBased?.()) {
+      const publicMsg = privateChannel
+        ? { content: `👋 Welcome <@${member.id}>!`, allowedMentions: { users: [member.id] } }
+        : payload;
+      try {
+        await publicChannel.send(publicMsg);
+      } catch (err) {
+        logger.error(`guildMemberAdd: failed to send welcome to ${channelId}: ${err.message}`);
+      }
+    }
+  } else if (!privateChannel) {
+    logger.warn('guildMemberAdd: neither welcome_channel_id nor onboarding_category_id configured — skipping greeting');
   }
 }
 

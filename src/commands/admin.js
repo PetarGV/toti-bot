@@ -327,6 +327,15 @@ export async function handleAdmin(interaction) {
     });
   }
 
+  if (sub === 'set-onboarding-category') {
+    const category = interaction.options.getChannel('category');
+    setConfig('onboarding_category_id', category.id);
+    return interaction.reply({
+      content: `✅ Onboarding category set to **${category.name}**. A private channel will be created there for each new member.`,
+      ephemeral: true,
+    });
+  }
+
   if (sub === 'set-coords') {
     const target = interaction.options.getUser('discord');
     const coords = interaction.options.getString('coords').trim();
