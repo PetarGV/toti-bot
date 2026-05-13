@@ -66,6 +66,11 @@ export const commandDefinitions = [
         .addChannelOption(o => o.setName('channel').setDescription('Welcome channel').setRequired(true))
     )
     .addSubcommand(s =>
+      s.setName('set-notifications-channel')
+        .setDescription('Set the channel for bot notifications (sync results, map fetch errors)')
+        .addChannelOption(o => o.setName('channel').setDescription('Notifications channel').setRequired(true))
+    )
+    .addSubcommand(s =>
       s.setName('set-onboarding-category')
         .setDescription('Set the category where a private channel is created for each new member')
         .addChannelOption(o =>

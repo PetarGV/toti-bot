@@ -9,6 +9,12 @@ import { applyMemberMapProfileMatches } from '../commands/admin.js';
 import { assignRolesFromIgn } from '../handlers/memberRoles.js';
 import { renameOnboardingChannel, flagOnboardingChannel } from '../handlers/onboarding.js';
 
+export function getNotificationsChannel(guild) {
+  const id = getConfig('notifications_channel_id');
+  if (id) return guild.channels.cache.get(id) ?? null;
+  return guild.channels.cache.find(c => c.name === 'bot-notifications' && c.isTextBased?.()) ?? null;
+}
+
 async function runMemberSync(client) {
   const guild = client.guilds.cache.first();
   if (!guild) {
@@ -40,12 +46,14 @@ async function runMemberSync(client) {
   const unresolvedAmbiguous = audit.ambiguous.filter(row => !getPrimaryLinkForUser(row.member.id));
 
   let rolesAssigned = 0;
+  let flaggedCount = 0;
   for (const row of [...profileSync.updated, ...profileSync.alreadyLinked]) {
     try {
       const roles = await assignRolesFromIgn({ member: row.member, ign: row.player.player });
       if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
       if (roles.allianceAssigned && roles.allianceRoleName === 'TBD') {
-        await flagOnboardingChannel(row.member.id, `**${row.player.player}** is no longer in the alliance (TBD)`, guild);
+        const flagged = await flagOnboardingChannel(row.member.id, `**${row.player.player}** is no longer in the alliance (TBD)`, guild);
+        if (flagged) flaggedCount++;
       }
     } catch (err) {
       logger.warn(`memberSync: role assignment failed for ${row.member.id}: ${err.message}`);
@@ -73,7 +81,8 @@ async function runMemberSync(client) {
       const roles = await assignRolesFromIgn({ member: discordMember, ign: link.ign });
       if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
       if (roles.allianceAssigned && roles.allianceRoleName === 'TBD') {
-        await flagOnboardingChannel(link.discord_id, `**${link.ign}** is no longer in the alliance (TBD)`, guild);
+        const flagged = await flagOnboardingChannel(link.discord_id, `**${link.ign}** is no longer in the alliance (TBD)`, guild);
+        if (flagged) flaggedCount++;
       }
     } catch (err) {
       logger.warn(`memberSync: role refresh failed for ${link.discord_id}: ${err.message}`);
@@ -82,17 +91,15 @@ async function runMemberSync(client) {
 
   logger.info(
     `memberSync: ${audit.matched.length} matched, ${profileSync.updated.length} new links, ` +
-    `${rolesAssigned} roles assigned, ${unresolvedAmbiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
+    `${rolesAssigned} roles assigned, ${flaggedCount} flagged, ${unresolvedAmbiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
   );
 
-  const hasChanges = profileSync.updated.length > 0 || rolesAssigned > 0;
+  const hasChanges = profileSync.updated.length > 0 || rolesAssigned > 0 || flaggedCount > 0;
   if (!hasChanges) return;
 
-  const notifChannel = guild.channels.cache.find(
-    c => c.name === 'bot-notifications' && c.isTextBased?.(),
-  );
+  const notifChannel = getNotificationsChannel(guild);
   if (!notifChannel) {
-    logger.warn('memberSync: #bot-notifications channel not found — skipping notification');
+    logger.warn('memberSync: notifications channel not configured — skipping notification');
     return;
   }
 
@@ -101,12 +108,13 @@ async function runMemberSync(client) {
   );
 
   const embed = new EmbedBuilder()
-    .setColor(COLORS.brand.info)
+    .setColor(flaggedCount > 0 ? COLORS.call.defense : COLORS.brand.info)
     .setTitle('🔄 Scheduled Member Sync')
     .addFields(
       { name: 'New Links',      value: String(profileSync.updated.length), inline: true },
       { name: 'Roles Assigned', value: String(rolesAssigned),              inline: true },
       { name: 'Ambiguous',      value: String(unresolvedAmbiguous.length), inline: true },
+      { name: '⚠️ Flagged',     value: String(flaggedCount),               inline: true },
     )
     .setFooter({ text: FOOTER })
     .setTimestamp();
@@ -125,13 +133,13 @@ async function runMemberSync(client) {
 }
 
 export function startMemberSyncJob(client) {
-  // Run at 06:00 and 18:00 every day (12-hour interval)
-  cron.schedule('0 6,18 * * *', async () => {
+  // Run at 06:30 and 18:30 every day — 30 min after map fetch to avoid race
+  cron.schedule('30 6,18 * * *', async () => {
     try {
       await runMemberSync(client);
     } catch (err) {
       logger.error('memberSync: job crashed:', err.message);
     }
   });
-  logger.info('Member sync job scheduled at 06:00 and 18:00 UTC daily');
+  logger.info('Member sync job scheduled at 06:30 and 18:30 UTC daily');
 }

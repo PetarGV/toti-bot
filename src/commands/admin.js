@@ -331,6 +331,15 @@ export async function handleAdmin(interaction) {
     });
   }
 
+  if (sub === 'set-notifications-channel') {
+    const channel = interaction.options.getChannel('channel');
+    setConfig('notifications_channel_id', channel.id);
+    return interaction.reply({
+      content: `✅ Notifications channel set to <#${channel.id}>. Sync results and map fetch errors will be posted there.`,
+      ephemeral: true,
+    });
+  }
+
   if (sub === 'set-onboarding-category') {
     const category = interaction.options.getChannel('category');
     setConfig('onboarding_category_id', category.id);

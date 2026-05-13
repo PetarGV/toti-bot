@@ -33,7 +33,7 @@ client.once('clientReady', async () => {
   await refreshOpenCalls(client);
   const openCount = prepare("SELECT COUNT(*) as c FROM calls WHERE status = 'open'").get();
   logger.info(`Restored ${openCount.c} active calls.`);
-  startMapFetchJob();
+  startMapFetchJob(client);
   startExpiryJob(client);
   startBackupJob();
   startTimerTickJob(client);

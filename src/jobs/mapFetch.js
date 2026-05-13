@@ -3,6 +3,7 @@ import { prepare, exec, transaction, getConfig, setConfig } from '../db/client.j
 import { logger } from '../utils/logger.js';
 import { unixNow } from '../utils/time.js';
 import { inc, set } from '../utils/metrics.js';
+import { getNotificationsChannel } from './memberSync.js';
 
 // Travian map.sql has changed over time. Older exports had 11 values, while
 // current exports include extra fields after population and may use "" strings.
@@ -239,7 +240,7 @@ export async function fetchMap() {
   return rows.length;
 }
 
-export function startMapFetchJob() {
+export function startMapFetchJob(client) {
   const hour = process.env.MAP_FETCH_HOUR || '6';
   const schedule = `0 ${hour} * * *`;
   cron.schedule(schedule, async () => {
@@ -248,6 +249,17 @@ export function startMapFetchJob() {
     } catch (err) {
       inc('mapFetchErrors');
       logger.error('Scheduled map fetch failed:', err.message);
+      if (client && err.message !== 'PRE_LAUNCH') {
+        try {
+          const guild = client.guilds.cache.first();
+          if (guild) {
+            const ch = getNotificationsChannel(guild);
+            if (ch) await ch.send(`⚠️ **Map fetch failed:** ${err.message}`);
+          }
+        } catch (notifErr) {
+          logger.warn('mapFetch: failed to send failure notification:', notifErr.message);
+        }
+      }
     }
   });
   logger.info(`Map fetch job scheduled at ${schedule}`);
