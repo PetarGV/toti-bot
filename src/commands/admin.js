@@ -20,6 +20,7 @@ import { buildSyncResolveButtons } from '../handlers/syncResolve.js';
 import { normalizeIgn } from '../utils/ign.js';
 import { applyCoordsAndDeriveTribe } from '../handlers/onboarding.js';
 import { assignRolesFromIgn } from '../handlers/memberRoles.js';
+import { CREW_ROLE_NAMES } from '../utils/roleSelection.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH  = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
@@ -474,6 +475,54 @@ export async function handleAdmin(interaction) {
       content: `Profile check for <@${target.id}>:\n${lines.join('\n')}`,
       ephemeral: true,
     });
+  }
+
+  if (sub === 'onboarding-status') {
+    await interaction.deferReply({ ephemeral: true });
+
+    // Get all users with an onboarding channel
+    const rows = prepare('SELECT discord_id, onboarding_channel_id FROM users WHERE onboarding_channel_id IS NOT NULL').all();
+
+    if (rows.length === 0) {
+      return interaction.editReply({ content: 'No onboarding channels found.' });
+    }
+
+    // Need guild to check crew roles
+    if (!interaction.guild) {
+      return interaction.editReply({ content: 'Must be run inside a server.' });
+    }
+
+    const lines = [];
+    for (const row of rows) {
+      const primary = getPrimaryLinkForUser(row.discord_id);
+
+      // Fetch guild member to check crew roles
+      const guildMember = await interaction.guild.members.fetch(row.discord_id).catch(() => null);
+
+      // Member left the server — skip
+      if (!guildMember) continue;
+
+      const incomplete = [];
+      if (!primary) incomplete.push('no IGN');
+      else if (primary.home_x == null) incomplete.push('no coords');
+
+      // Check crew role
+      const memberRoleNames = Array.from(guildMember.roles.cache.values()).map(r => r.name);
+      const hasCrew = CREW_ROLE_NAMES.some(name => memberRoleNames.includes(name));
+      if (!hasCrew) incomplete.push('no crew role');
+
+      if (incomplete.length === 0) continue; // fully onboarded — skip
+
+      const channelRef = `<#${row.onboarding_channel_id}>`;
+      lines.push(`<@${row.discord_id}> ${channelRef} — missing: ${incomplete.join(', ')}`);
+    }
+
+    if (lines.length === 0) {
+      return interaction.editReply({ content: '✅ All members with onboarding channels have completed setup.' });
+    }
+
+    const content = `**Incomplete onboarding (${lines.length}):**\n${lines.join('\n')}`;
+    return interaction.editReply({ content });
   }
 
   if (sub === 'sync-exclude') {

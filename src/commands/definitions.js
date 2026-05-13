@@ -112,6 +112,10 @@ export const commandDefinitions = [
     .addSubcommand(s =>
       s.setName('sync-excluded-list')
         .setDescription('Show all members currently excluded from automatic sync')
+    )
+    .addSubcommand(s =>
+      s.setName('onboarding-status')
+        .setDescription('List members with incomplete onboarding (missing IGN, crew role, or coords)')
     ),
 
   // ── Slash mirrors of panel buttons ──────────────────────────────────────
