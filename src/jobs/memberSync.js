@@ -7,6 +7,7 @@ import { getTravianPlayersFromMap, buildMemberMapAudit } from '../utils/memberMa
 import { getPrimaryLinkForUser } from '../handlers/userIgnLinks.js';
 import { applyMemberMapProfileMatches } from '../commands/admin.js';
 import { assignRolesFromIgn } from '../handlers/memberRoles.js';
+import { renameOnboardingChannel } from '../handlers/onboarding.js';
 
 async function runMemberSync(client) {
   const guild = client.guilds.cache.first();
@@ -42,6 +43,11 @@ async function runMemberSync(client) {
     } catch (err) {
       logger.warn(`memberSync: role assignment failed for ${row.member.id}: ${err.message}`);
     }
+  }
+
+  // Rename private onboarding channels for newly linked members
+  for (const row of profileSync.updated) {
+    await renameOnboardingChannel(row.member.id, row.player.player, guild);
   }
 
   logger.info(
