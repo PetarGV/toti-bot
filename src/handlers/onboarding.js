@@ -319,6 +319,60 @@ function getRolesPanelUrl(guildId) {
   return `https://discord.com/channels/${guildId}/${panel.channel_id}/${panel.message_id}`;
 }
 
+function buildLeadershipMentions(guild) {
+  if (!guild?.roles?.cache) return '';
+
+  const leadershipRoles = LEADERSHIP_ROLE_NAMES
+    .map(name => guild.roles.cache.find(r => r.name === name))
+    .filter(Boolean);
+
+  const mentionedIds = new Set();
+  const mentions = [];
+
+  for (const role of leadershipRoles) {
+    for (const member of role.members.values()) {
+      if (!mentionedIds.has(member.id)) {
+        mentionedIds.add(member.id);
+        mentions.push(`<@${member.id}>`);
+      }
+    }
+  }
+
+  return mentions.join(' ');
+}
+
+async function sendLeadershipIntro(channel, member, autoIgn) {
+  try {
+    const mentions = buildLeadershipMentions(member.guild);
+    const lines = [];
+
+    if (mentions) {
+      lines.push(mentions);
+    }
+
+    lines.push(`New member: **${member.displayName}**`);
+
+    if (autoIgn) {
+      lines.push(`IGN: **${autoIgn}** (auto-linked)`);
+    } else {
+      lines.push(`IGN: *not yet linked*`);
+    }
+
+    const memberIds = Array.from(member.guild.roles.cache
+      .filter(r => LEADERSHIP_ROLE_NAMES.includes(r.name))
+      .flatMap(r => Array.from(r.members.keys())));
+
+    await channel.send({
+      content: lines.join('\n'),
+      allowedMentions: { users: memberIds },
+    });
+
+    logger.info(`guildMemberAdd: sent leadership intro for ${member.user.tag}`);
+  } catch (err) {
+    logger.warn(`guildMemberAdd: failed to send leadership intro: ${err.message}`);
+  }
+}
+
 export async function handleGuildMemberAdd(member) {
   if (member.user?.bot) return;
 
@@ -352,6 +406,11 @@ export async function handleGuildMemberAdd(member) {
     } catch (err) {
       logger.warn(`guildMemberAdd: could not rename onboarding channel to IGN: ${err.message}`);
     }
+  }
+
+  // Send leadership intro message before the onboarding wizard
+  if (privateChannel) {
+    await sendLeadershipIntro(privateChannel, member, autoIgn);
   }
 
   const payload = buildWelcomePayload({
