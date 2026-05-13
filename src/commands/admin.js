@@ -19,7 +19,8 @@ import { upsertAccountFromMap } from '../handlers/travianAccounts.js';
 import { buildSyncResolveButtons } from '../handlers/syncResolve.js';
 import { normalizeIgn } from '../utils/ign.js';
 import { applyCoordsAndDeriveTribe } from '../handlers/onboarding.js';
-import { assignRolesFromIgn, findUnlinkedTbds } from '../handlers/memberRoles.js';
+import { findUnlinkedTbds } from '../handlers/memberRoles.js';
+import { applyMemberSyncRoles } from '../jobs/memberSync.js';
 import { CREW_ROLE_NAMES } from '../utils/roleSelection.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -201,21 +202,19 @@ export async function handleAdmin(interaction) {
       ? applyMemberMapProfileMatches(audit)
       : { updated: [], alreadyLinked: [], conflicts: [] };
 
-    let rolesAssigned = 0;
-    const rowsToRole = [...profileSync.updated, ...profileSync.alreadyLinked];
-    for (const row of rowsToRole) {
-      try {
-        const roles = await assignRolesFromIgn({ member: row.member, ign: row.player.player });
-        if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
-      } catch (err) {
-        logger.warn(`sync-members: role assignment failed for ${row.member.id}: ${err.message}`);
-      }
-    }
+    const { rolesAssigned, flaggedTbd, flaggedMissingIgn } = await applyMemberSyncRoles({
+      guild: interaction.guild,
+      memberCollection,
+      members,
+      profileSync,
+      excluded,
+    });
 
     const unlinkedTbds = findUnlinkedTbds(interaction.guild, members);
+    const anyFlagged = flaggedTbd.length + flaggedMissingIgn.length + unlinkedTbds.length;
 
     const embed = new EmbedBuilder()
-      .setColor(unlinkedTbds.length > 0 ? COLORS.call.defense : COLORS.brand.info)
+      .setColor(anyFlagged > 0 ? COLORS.call.defense : COLORS.brand.info)
       .setTitle('Discord Member Map Sync')
       .setDescription(
         updateProfiles
@@ -223,16 +222,18 @@ export async function handleAdmin(interaction) {
           : 'Matched Discord display names against Travian player names without updating bot profiles.',
       )
       .addFields(
-        { name: 'Discord Members', value: String(audit.totalMembers), inline: true },
-        { name: 'Travian Players',  value: String(audit.totalPlayers), inline: true },
-        { name: 'Unique Matches',   value: String(audit.matched.length), inline: true },
-        { name: 'Profiles Updated', value: String(profileSync.updated.length), inline: true },
-        { name: 'Roles Assigned',   value: String(rolesAssigned), inline: true },
-        { name: 'Already Linked',   value: String(profileSync.alreadyLinked.length), inline: true },
-        { name: 'Profile Conflicts', value: String(profileSync.conflicts.length), inline: true },
-        { name: 'Ambiguous',        value: String(unresolvedAmbiguous.length), inline: true },
-        { name: 'Unmatched',        value: String(audit.unmatched.length), inline: true },
-        { name: '🚨 Unlinked TBDs', value: String(unlinkedTbds.length), inline: true },
+        { name: 'Discord Members',    value: String(audit.totalMembers), inline: true },
+        { name: 'Travian Players',    value: String(audit.totalPlayers), inline: true },
+        { name: 'Unique Matches',     value: String(audit.matched.length), inline: true },
+        { name: 'Profiles Updated',   value: String(profileSync.updated.length), inline: true },
+        { name: 'Roles Assigned',     value: String(rolesAssigned), inline: true },
+        { name: 'Already Linked',     value: String(profileSync.alreadyLinked.length), inline: true },
+        { name: 'Profile Conflicts',  value: String(profileSync.conflicts.length), inline: true },
+        { name: 'Ambiguous',          value: String(unresolvedAmbiguous.length), inline: true },
+        { name: 'Unmatched',          value: String(audit.unmatched.length), inline: true },
+        { name: '⚠️ Flagged (TBD)',   value: String(flaggedTbd.length), inline: true },
+        { name: '⚠️ Missing IGN',     value: String(flaggedMissingIgn.length), inline: true },
+        { name: '🚨 Unlinked TBDs',   value: String(unlinkedTbds.length), inline: true },
       )
       .setFooter({ text: 'Matching ignores case, spaces, punctuation, symbols, and accents.' })
       .setTimestamp();
@@ -275,6 +276,22 @@ export async function handleAdmin(interaction) {
       });
     }
 
+    if (flaggedTbd.length) {
+      embed.addFields({
+        name: '⚠️ Newly Flagged (moved to TBD)',
+        value: firstLines(flaggedTbd.map(f => `<@${f.discordId}> → **${f.ign}** (TBD)`)),
+        inline: false,
+      });
+    }
+
+    if (flaggedMissingIgn.length) {
+      embed.addFields({
+        name: '⚠️ Newly Flagged (IGN missing from map)',
+        value: firstLines(flaggedMissingIgn.map(f => `<@${f.discordId}> → **${f.ign}** (gone from map)`)),
+        inline: false,
+      });
+    }
+
     if (unlinkedTbds.length) {
       embed.addFields({
         name: '🚨 Unlinked TBDs (no IGN link)',
@@ -287,6 +304,7 @@ export async function handleAdmin(interaction) {
     logger.info(
       `Member sync by ${interaction.user.tag}: ${audit.matched.length} matched, ` +
       `${profileSync.updated.length} updated, ${unresolvedAmbiguous.length} ambiguous, ` +
+      `${flaggedTbd.length} flagged TBD, ${flaggedMissingIgn.length} flagged missing IGN, ` +
       `${unlinkedTbds.length} unlinked TBDs, ${audit.unmatched.length} unmatched`,
     );
 

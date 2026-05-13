@@ -203,10 +203,12 @@ The 12-hourly **member sync job** ([AUTOMATIONS.md](AUTOMATIONS.md)) interacts w
 | Sync detects                                  | Action                                                                          |
 |-----------------------------------------------|---------------------------------------------------------------------------------|
 | New auto-matchable member (no existing link)  | Same as join: link, assign roles, **rename onboarding channel** to the IGN     |
-| Existing linked member, alliance role changed | Re-assign alliance role; if new role is `TBD`, **flag channel for review**     |
-| Existing linked member, IGN gone from x\_world | **Flag channel** (`account deleted or wiped`) — skip role assignment            |
-| Member with `TBD` role but no IGN link        | List them in the sync embed under **🚨 Unlinked TBDs** so leadership can `/admin link` or `/admin sync-exclude` them |
+| Existing linked member, alliance role changed | Re-assign role; if new role is `TBD`, **flag channel** + list in embed under **⚠️ Newly Flagged (moved to TBD)** |
+| Existing linked member, IGN gone from x\_world | **Flag channel** + list under **⚠️ Newly Flagged (IGN missing from map)** — skip role assignment |
+| Member with `TBD` role but no IGN link        | List under **🚨 Unlinked TBDs** so leadership can `/admin link` or `/admin sync-exclude` them |
 | Excluded member (`/admin sync-exclude`)       | Skipped entirely — never auto-linked, never flagged                            |
+
+All four lists appear with `@`-mentions in both `/admin sync-members` and the scheduled cron notification, so leadership has full visibility into who needs attention.
 
 The sync ignores members in `sync_exclusions` so leadership, sitters, or out-of-alliance test accounts don't get processed.
 

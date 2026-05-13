@@ -11,6 +11,120 @@ import { renameOnboardingChannel, flagOnboardingChannel } from '../handlers/onbo
 import { getPrimaryGuild, getNotificationsChannel } from '../utils/guild.js';
 import { unixNow } from '../utils/time.js';
 
+// Refresh roles for a single (member, ign) pair and flag the onboarding
+// channel if the member just transitioned to TBD or if their IGN has
+// vanished from x_world.
+//
+// Returns: { rolesAssigned, flaggedTbd, flaggedMissingIgn }
+//   flaggedTbd / flaggedMissingIgn are booleans — true only when the channel
+//   was newly flagged (idempotent: already-flagged channels return false).
+//
+// checkMapPresence=true for the "all-primary-links" loop where the IGN may
+// have disappeared from the map. Skip it for audit-matched rows since those
+// IGNs are guaranteed to be in x_world.
+export async function refreshSyncMember({ member, ign, guild, checkMapPresence }) {
+  if (checkMapPresence) {
+    const exists = prepare(
+      'SELECT 1 FROM x_world WHERE player IS NOT NULL AND lower(player) = lower(?) LIMIT 1',
+    ).get(ign);
+    if (!exists) {
+      const did = await flagOnboardingChannel(
+        member.id,
+        `**${ign}** is no longer in the map data (account deleted or wiped)`,
+        guild,
+      );
+      return { rolesAssigned: false, flaggedTbd: false, flaggedMissingIgn: did };
+    }
+  }
+
+  try {
+    const roles = await assignRolesFromIgn({ member, ign });
+    const rolesAssigned = roles.tribeAssigned || roles.allianceAssigned;
+    let flaggedTbd = false;
+    if (roles.allianceAssigned && roles.allianceRoleName === 'TBD') {
+      flaggedTbd = await flagOnboardingChannel(
+        member.id,
+        `**${ign}** moved to **TBD** — no longer in the alliance`,
+        guild,
+      );
+    }
+    return { rolesAssigned, flaggedTbd, flaggedMissingIgn: false };
+  } catch (err) {
+    logger.warn(`refreshSyncMember: ${member.id} / ${ign}: ${err.message}`);
+    return { rolesAssigned: false, flaggedTbd: false, flaggedMissingIgn: false };
+  }
+}
+
+// Runs both the audit-matched loop and the all-primary-links loop, plus the
+// channel renames. Returns structured results so callers (cron + admin) can
+// present them how they like.
+export async function applyMemberSyncRoles({ guild, memberCollection, members, profileSync, excluded }) {
+  let rolesAssigned = 0;
+  const flaggedTbd = [];          // [{ discordId, displayName, ign }]
+  const flaggedMissingIgn = [];   // same shape
+
+  // Loop 1: audit-matched + already-linked rows
+  for (const row of [...profileSync.updated, ...profileSync.alreadyLinked]) {
+    const r = await refreshSyncMember({
+      member: row.member,
+      ign: row.player.player,
+      guild,
+      checkMapPresence: false,
+    });
+    if (r.rolesAssigned) rolesAssigned++;
+    if (r.flaggedTbd) {
+      flaggedTbd.push({
+        discordId: row.member.id,
+        displayName: row.member.displayName,
+        ign: row.player.player,
+      });
+    }
+  }
+
+  // Rename private onboarding channels for newly linked members
+  for (const row of profileSync.updated) {
+    await renameOnboardingChannel(row.member.id, row.player.player, guild);
+  }
+
+  // Loop 2: every primary link in the DB not already touched by loop 1
+  const processedIds = new Set([
+    ...profileSync.updated.map(r => r.member.id),
+    ...profileSync.alreadyLinked.map(r => r.member.id),
+  ]);
+  const allPrimaryLinks = prepare(
+    'SELECT discord_id, ign FROM user_ign_links WHERE is_primary = 1',
+  ).all();
+  for (const link of allPrimaryLinks) {
+    if (processedIds.has(link.discord_id) || excluded.has(link.discord_id)) continue;
+    const discordMember = memberCollection.get(link.discord_id);
+    if (!discordMember) continue; // member left the server
+
+    const r = await refreshSyncMember({
+      member: discordMember,
+      ign: link.ign,
+      guild,
+      checkMapPresence: true,
+    });
+    if (r.rolesAssigned) rolesAssigned++;
+    if (r.flaggedTbd) {
+      flaggedTbd.push({
+        discordId: discordMember.id,
+        displayName: discordMember.displayName,
+        ign: link.ign,
+      });
+    }
+    if (r.flaggedMissingIgn) {
+      flaggedMissingIgn.push({
+        discordId: discordMember.id,
+        displayName: discordMember.displayName,
+        ign: link.ign,
+      });
+    }
+  }
+
+  return { rolesAssigned, flaggedTbd, flaggedMissingIgn };
+}
+
 export async function runMemberSync(client) {
   const guild = getPrimaryGuild(client);
   if (!guild) {
@@ -41,70 +155,18 @@ export async function runMemberSync(client) {
   const profileSync = applyMemberMapProfileMatches(audit);
   const unresolvedAmbiguous = audit.ambiguous.filter(row => !getPrimaryLinkForUser(row.member.id));
 
-  let rolesAssigned = 0;
-  let flaggedCount = 0;
-  for (const row of [...profileSync.updated, ...profileSync.alreadyLinked]) {
-    try {
-      const roles = await assignRolesFromIgn({ member: row.member, ign: row.player.player });
-      if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
-      if (roles.allianceAssigned && roles.allianceRoleName === 'TBD') {
-        const flagged = await flagOnboardingChannel(row.member.id, `**${row.player.player}** is no longer in the alliance (TBD)`, guild);
-        if (flagged) flaggedCount++;
-      }
-    } catch (err) {
-      logger.warn(`memberSync: role assignment failed for ${row.member.id}: ${err.message}`);
-    }
-  }
-
-  // Rename private onboarding channels for newly linked members
-  for (const row of profileSync.updated) {
-    await renameOnboardingChannel(row.member.id, row.player.player, guild);
-  }
-
-  // Refresh roles for all members currently linked in DB who weren't already processed
-  const processedIds = new Set([
-    ...profileSync.updated.map(r => r.member.id),
-    ...profileSync.alreadyLinked.map(r => r.member.id),
-  ]);
-  const allPrimaryLinks = prepare(
-    'SELECT discord_id, ign FROM user_ign_links WHERE is_primary = 1'
-  ).all();
-  const checkIgnInMap = prepare(
-    'SELECT 1 FROM x_world WHERE player IS NOT NULL AND lower(player) = lower(?) LIMIT 1'
-  );
-  for (const link of allPrimaryLinks) {
-    if (processedIds.has(link.discord_id) || excluded.has(link.discord_id)) continue;
-    const discordMember = memberCollection.get(link.discord_id);
-    if (!discordMember) continue; // member left the server
-    try {
-      if (!checkIgnInMap.get(link.ign)) {
-        const flagged = await flagOnboardingChannel(
-          link.discord_id,
-          `**${link.ign}** is no longer in the map data (account deleted or wiped)`,
-          guild,
-        );
-        if (flagged) flaggedCount++;
-        continue;
-      }
-      const roles = await assignRolesFromIgn({ member: discordMember, ign: link.ign });
-      if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
-      if (roles.allianceAssigned && roles.allianceRoleName === 'TBD') {
-        const flagged = await flagOnboardingChannel(link.discord_id, `**${link.ign}** is no longer in the alliance (TBD)`, guild);
-        if (flagged) flaggedCount++;
-      }
-    } catch (err) {
-      logger.warn(`memberSync: role refresh failed for ${link.discord_id}: ${err.message}`);
-    }
-  }
-
+  const { rolesAssigned, flaggedTbd, flaggedMissingIgn } = await applyMemberSyncRoles({
+    guild, memberCollection, members, profileSync, excluded,
+  });
+  const flaggedCount = flaggedTbd.length + flaggedMissingIgn.length;
   const unlinkedTbds = findUnlinkedTbds(guild, members);
 
   setConfig('last_sync_at', unixNow());
 
   logger.info(
     `memberSync: ${audit.matched.length} matched, ${profileSync.updated.length} new links, ` +
-    `${rolesAssigned} roles assigned, ${flaggedCount} flagged, ${unresolvedAmbiguous.length} ambiguous, ` +
-    `${unlinkedTbds.length} unlinked TBDs, ${audit.unmatched.length} unmatched`,
+    `${rolesAssigned} roles assigned, ${flaggedCount} flagged (${flaggedTbd.length} TBD, ${flaggedMissingIgn.length} missing IGN), ` +
+    `${unresolvedAmbiguous.length} ambiguous, ${unlinkedTbds.length} unlinked TBDs, ${audit.unmatched.length} unmatched`,
   );
 
   const hasChanges =
@@ -131,7 +193,8 @@ export async function runMemberSync(client) {
       { name: 'New Links',         value: String(profileSync.updated.length), inline: true },
       { name: 'Roles Assigned',    value: String(rolesAssigned),              inline: true },
       { name: 'Ambiguous',         value: String(unresolvedAmbiguous.length), inline: true },
-      { name: '⚠️ Flagged',        value: String(flaggedCount),               inline: true },
+      { name: '⚠️ Flagged (TBD)',  value: String(flaggedTbd.length),          inline: true },
+      { name: '⚠️ Missing IGN',    value: String(flaggedMissingIgn.length),   inline: true },
       { name: '🚨 Unlinked TBDs',  value: String(unlinkedTbds.length),        inline: true },
     )
     .setFooter({ text: FOOTER })
@@ -141,6 +204,26 @@ export async function runMemberSync(client) {
     const shown = lines.slice(0, 10);
     const extra = lines.length > 10 ? `\n…and ${lines.length - 10} more` : '';
     embed.addFields({ name: 'Newly Linked', value: shown.join('\n') + extra });
+  }
+
+  if (flaggedTbd.length) {
+    const fLines = flaggedTbd.map(f => `<@${f.discordId}> → **${f.ign}** (TBD)`);
+    const shown = fLines.slice(0, 10);
+    const extra = fLines.length > 10 ? `\n…and ${fLines.length - 10} more` : '';
+    embed.addFields({
+      name: '⚠️ Newly Flagged (moved to TBD)',
+      value: shown.join('\n') + extra,
+    });
+  }
+
+  if (flaggedMissingIgn.length) {
+    const fLines = flaggedMissingIgn.map(f => `<@${f.discordId}> → **${f.ign}** (gone from map)`);
+    const shown = fLines.slice(0, 10);
+    const extra = fLines.length > 10 ? `\n…and ${fLines.length - 10} more` : '';
+    embed.addFields({
+      name: '⚠️ Newly Flagged (IGN missing from map)',
+      value: shown.join('\n') + extra,
+    });
   }
 
   if (unlinkedTbds.length) {
