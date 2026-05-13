@@ -106,18 +106,37 @@ export async function updateOnboardingChannelTopic(discordId, ign, guild) {
   }
 }
 
-export async function handleGuildMemberRemove(member) {
-  if (member.user?.bot) return;
-  const row = prepare('SELECT onboarding_channel_id FROM users WHERE discord_id = ?').get(member.id);
+export async function flagOnboardingChannel(discordId, reason, guild) {
+  const row = prepare('SELECT onboarding_channel_id FROM users WHERE discord_id = ?').get(discordId);
   if (!row?.onboarding_channel_id) return;
   try {
-    const channel = await member.guild.channels.fetch(row.onboarding_channel_id).catch(() => null);
-    if (channel) await channel.delete();
-    prepare('UPDATE users SET onboarding_channel_id = NULL WHERE discord_id = ?').run(member.id);
-    logger.info(`guildMemberRemove: deleted onboarding channel for ${member.user?.tag ?? member.id}`);
+    const channel = await guild.channels.fetch(row.onboarding_channel_id).catch(() => null);
+    if (!channel) return;
+
+    const currentName = channel.name ?? '';
+    if (!currentName.startsWith('review-')) {
+      await channel.setName(`review-${currentName.slice(0, 93)}`);
+    }
+
+    const { mentionString, memberIds } = buildLeadershipMentions(guild);
+    const lines = [];
+    if (mentionString) lines.push(mentionString);
+    lines.push(`⚠️ **Action required** — ${reason}`);
+
+    await channel.send({
+      content: lines.join('\n'),
+      allowedMentions: { users: memberIds },
+    });
+
+    logger.info(`flagOnboardingChannel: flagged ${discordId} — ${reason}`);
   } catch (err) {
-    logger.warn(`guildMemberRemove: could not delete onboarding channel for ${member.id}: ${err.message}`);
+    logger.warn(`flagOnboardingChannel: ${discordId}: ${err.message}`);
   }
+}
+
+export async function handleGuildMemberRemove(member) {
+  if (member.user?.bot) return;
+  await flagOnboardingChannel(member.id, `<@${member.id}> (${member.user?.tag ?? member.id}) left the server`, member.guild);
 }
 
 function hasCrewRole(memberRoleNames) {

@@ -7,7 +7,7 @@ import { getTravianPlayersFromMap, buildMemberMapAudit } from '../utils/memberMa
 import { getPrimaryLinkForUser } from '../handlers/userIgnLinks.js';
 import { applyMemberMapProfileMatches } from '../commands/admin.js';
 import { assignRolesFromIgn } from '../handlers/memberRoles.js';
-import { renameOnboardingChannel } from '../handlers/onboarding.js';
+import { renameOnboardingChannel, flagOnboardingChannel } from '../handlers/onboarding.js';
 
 async function runMemberSync(client) {
   const guild = client.guilds.cache.first();
@@ -44,6 +44,9 @@ async function runMemberSync(client) {
     try {
       const roles = await assignRolesFromIgn({ member: row.member, ign: row.player.player });
       if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
+      if (roles.allianceAssigned && roles.allianceRoleName === 'TBD') {
+        await flagOnboardingChannel(row.member.id, `**${row.player.player}** is no longer in the alliance (TBD)`, guild);
+      }
     } catch (err) {
       logger.warn(`memberSync: role assignment failed for ${row.member.id}: ${err.message}`);
     }
@@ -69,6 +72,9 @@ async function runMemberSync(client) {
     try {
       const roles = await assignRolesFromIgn({ member: discordMember, ign: link.ign });
       if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
+      if (roles.allianceAssigned && roles.allianceRoleName === 'TBD') {
+        await flagOnboardingChannel(link.discord_id, `**${link.ign}** is no longer in the alliance (TBD)`, guild);
+      }
     } catch (err) {
       logger.warn(`memberSync: role refresh failed for ${link.discord_id}: ${err.message}`);
     }
