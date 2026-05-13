@@ -508,7 +508,9 @@ export async function handleAdmin(interaction) {
 
       // Check crew role
       const memberRoleNames = Array.from(guildMember.roles.cache.values()).map(r => r.name);
-      const hasCrew = CREW_ROLE_NAMES.some(name => memberRoleNames.includes(name));
+      const hasCrew = CREW_ROLE_NAMES.some(crewName =>
+        memberRoleNames.some(r => r.trim().toLowerCase() === crewName.trim().toLowerCase())
+      );
       if (!hasCrew) incomplete.push('no crew role');
 
       if (incomplete.length === 0) continue; // fully onboarded — skip
