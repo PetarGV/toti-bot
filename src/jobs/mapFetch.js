@@ -3,7 +3,7 @@ import { prepare, exec, transaction, getConfig, setConfig } from '../db/client.j
 import { logger } from '../utils/logger.js';
 import { unixNow } from '../utils/time.js';
 import { inc, set } from '../utils/metrics.js';
-import { getNotificationsChannel } from './memberSync.js';
+import { getPrimaryGuild, getNotificationsChannel } from '../utils/guild.js';
 
 // Travian map.sql has changed over time. Older exports had 11 values, while
 // current exports include extra fields after population and may use "" strings.
@@ -207,6 +207,7 @@ export async function fetchMap() {
   logger.info('Fetching map.sql from', url);
   const res = await fetch(url, {
     headers: { 'User-Agent': 'TravianAllianceBot/1.0 (Discord)' },
+    signal: AbortSignal.timeout(30_000),
   });
 
   if (res.status === 404) throw new Error('PRE_LAUNCH');
@@ -240,22 +241,43 @@ export async function fetchMap() {
   return rows.length;
 }
 
+// PRE_LAUNCH = server not serving map.sql yet; EMPTY_RESPONSE = served but empty.
+// Both indicate "nothing to retry" rather than a transient failure.
+const NON_RETRYABLE_ERRORS = new Set(['PRE_LAUNCH', 'EMPTY_RESPONSE']);
+
+const RETRY_DELAYS_MS = [60_000, 300_000]; // 1 min, 5 min — 3 attempts total
+
+export async function fetchMapWithRetry() {
+  let lastErr;
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    try {
+      return await fetchMap();
+    } catch (err) {
+      lastErr = err;
+      if (NON_RETRYABLE_ERRORS.has(err.message)) throw err;
+      if (attempt < RETRY_DELAYS_MS.length) {
+        const delay = RETRY_DELAYS_MS[attempt];
+        logger.warn(`Map fetch attempt ${attempt + 1} failed: ${err.message} — retrying in ${delay / 1000}s`);
+        await new Promise(r => setTimeout(r, delay));
+      }
+    }
+  }
+  throw lastErr;
+}
+
 export function startMapFetchJob(client) {
   const hour = process.env.MAP_FETCH_HOUR || '6';
   const schedule = `0 ${hour} * * *`;
   cron.schedule(schedule, async () => {
     try {
-      await fetchMap();
+      await fetchMapWithRetry();
     } catch (err) {
       inc('mapFetchErrors');
-      logger.error('Scheduled map fetch failed:', err.message);
+      logger.error('Scheduled map fetch failed (after retries):', err.message);
       if (client && err.message !== 'PRE_LAUNCH') {
         try {
-          const guild = client.guilds.cache.first();
-          if (guild) {
-            const ch = getNotificationsChannel(guild);
-            if (ch) await ch.send(`⚠️ **Map fetch failed:** ${err.message}`);
-          }
+          const ch = getNotificationsChannel(getPrimaryGuild(client));
+          if (ch) await ch.send(`⚠️ **Map fetch failed:** ${err.message}`);
         } catch (notifErr) {
           logger.warn('mapFetch: failed to send failure notification:', notifErr.message);
         }

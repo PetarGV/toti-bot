@@ -68,6 +68,19 @@ export function runMigrations() {
   }
 
   try {
+    exec(`
+      CREATE TABLE IF NOT EXISTS pending_message_deletes (
+        channel_id TEXT NOT NULL,
+        message_id TEXT NOT NULL,
+        delete_at  INTEGER NOT NULL,
+        PRIMARY KEY (channel_id, message_id)
+      )
+    `);
+  } catch (err) {
+    logger.warn('Migration pending_message_deletes table skipped:', err.message);
+  }
+
+  try {
     exec("UPDATE panels SET type='scout' WHERE type='intel'");
   } catch (err) {
     logger.warn("Migration panels.type intel→scout skipped:", err.message);

@@ -4,9 +4,9 @@ import { unixNow } from '../utils/time.js';
 import { formatDuration } from '../utils/duration.js';
 import { logger } from '../utils/logger.js';
 
-const AUTO_DELETE_MS = 30_000;
+const AUTO_DELETE_SEC = 30;
 
-async function tickOnce(client) {
+async function fireDueTimers(client) {
   const now = unixNow();
   const due = prepare('SELECT * FROM timers WHERE next_fire_at <= ?').all(now);
 
@@ -30,10 +30,10 @@ async function tickOnce(client) {
         allowedMentions: { users: [t.user_id] },
       });
 
-      // Auto-delete after 30s — user keeps the ping notification
-      setTimeout(() => {
-        msg.delete().catch(() => {});
-      }, AUTO_DELETE_MS);
+      // Schedule auto-delete via DB so it survives restarts.
+      prepare(
+        'INSERT OR REPLACE INTO pending_message_deletes (channel_id, message_id, delete_at) VALUES (?, ?, ?)'
+      ).run(channel.id, msg.id, now + AUTO_DELETE_SEC);
 
       prepare('UPDATE timers SET next_fire_at = ?, fires_count = ? WHERE user_id = ?')
         .run(now + t.interval_sec, fires, t.user_id);
@@ -44,6 +44,31 @@ async function tickOnce(client) {
         .run(now + t.interval_sec, t.user_id);
     }
   }
+}
+
+async function drainPendingDeletes(client) {
+  const now = unixNow();
+  const due = prepare(
+    'SELECT channel_id, message_id FROM pending_message_deletes WHERE delete_at <= ?'
+  ).all(now);
+
+  for (const row of due) {
+    try {
+      const channel = await client.channels.fetch(row.channel_id);
+      if (channel?.isTextBased?.()) {
+        await channel.messages.delete(row.message_id).catch(() => {});
+      }
+    } catch {
+      // Channel gone or message already gone — fine, just drop the row.
+    }
+    prepare('DELETE FROM pending_message_deletes WHERE channel_id = ? AND message_id = ?')
+      .run(row.channel_id, row.message_id);
+  }
+}
+
+async function tickOnce(client) {
+  await fireDueTimers(client);
+  await drainPendingDeletes(client);
 }
 
 export function startTimerTickJob(client) {

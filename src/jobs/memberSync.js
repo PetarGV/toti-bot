@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { EmbedBuilder } from 'discord.js';
-import { getConfig, prepare } from '../db/client.js';
+import { prepare, setConfig } from '../db/client.js';
 import { logger } from '../utils/logger.js';
 import { COLORS, FOOTER } from '../utils/i18n.js';
 import { getTravianPlayersFromMap, buildMemberMapAudit } from '../utils/memberMapMonitor.js';
@@ -8,15 +8,11 @@ import { getPrimaryLinkForUser } from '../handlers/userIgnLinks.js';
 import { applyMemberMapProfileMatches } from '../commands/admin.js';
 import { assignRolesFromIgn } from '../handlers/memberRoles.js';
 import { renameOnboardingChannel, flagOnboardingChannel } from '../handlers/onboarding.js';
+import { getPrimaryGuild, getNotificationsChannel } from '../utils/guild.js';
+import { unixNow } from '../utils/time.js';
 
-export function getNotificationsChannel(guild) {
-  const id = getConfig('notifications_channel_id');
-  if (id) return guild.channels.cache.get(id) ?? null;
-  return guild.channels.cache.find(c => c.name === 'bot-notifications' && c.isTextBased?.()) ?? null;
-}
-
-async function runMemberSync(client) {
-  const guild = client.guilds.cache.first();
+export async function runMemberSync(client) {
+  const guild = getPrimaryGuild(client);
   if (!guild) {
     logger.warn('memberSync: no guild in cache — skipping');
     return;
@@ -73,11 +69,23 @@ async function runMemberSync(client) {
   const allPrimaryLinks = prepare(
     'SELECT discord_id, ign FROM user_ign_links WHERE is_primary = 1'
   ).all();
+  const checkIgnInMap = prepare(
+    'SELECT 1 FROM x_world WHERE player IS NOT NULL AND lower(player) = lower(?) LIMIT 1'
+  );
   for (const link of allPrimaryLinks) {
     if (processedIds.has(link.discord_id) || excluded.has(link.discord_id)) continue;
     const discordMember = memberCollection.get(link.discord_id);
     if (!discordMember) continue; // member left the server
     try {
+      if (!checkIgnInMap.get(link.ign)) {
+        const flagged = await flagOnboardingChannel(
+          link.discord_id,
+          `**${link.ign}** is no longer in the map data (account deleted or wiped)`,
+          guild,
+        );
+        if (flagged) flaggedCount++;
+        continue;
+      }
       const roles = await assignRolesFromIgn({ member: discordMember, ign: link.ign });
       if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
       if (roles.allianceAssigned && roles.allianceRoleName === 'TBD') {
@@ -88,6 +96,8 @@ async function runMemberSync(client) {
       logger.warn(`memberSync: role refresh failed for ${link.discord_id}: ${err.message}`);
     }
   }
+
+  setConfig('last_sync_at', unixNow());
 
   logger.info(
     `memberSync: ${audit.matched.length} matched, ${profileSync.updated.length} new links, ` +

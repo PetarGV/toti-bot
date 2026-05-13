@@ -4,13 +4,14 @@ process.env.TZ = 'UTC';
 
 import 'dotenv/config';
 import { Client, GatewayIntentBits, InteractionType, Events } from 'discord.js';
-import { initDb, prepare, flushDb } from './db/client.js';
+import { initDb, prepare, flushDb, getConfig } from './db/client.js';
 import { restorePanels } from './panel/deploy.js';
-import { startMapFetchJob } from './jobs/mapFetch.js';
+import { startMapFetchJob, fetchMapWithRetry } from './jobs/mapFetch.js';
 import { startExpiryJob } from './jobs/expiry.js';
 import { startBackupJob } from './jobs/backup.js';
 import { startTimerTickJob } from './jobs/timerTick.js';
-import { startMemberSyncJob } from './jobs/memberSync.js';
+import { startMemberSyncJob, runMemberSync } from './jobs/memberSync.js';
+import { unixNow } from './utils/time.js';
 import { startHealthServer, stopHealthServer } from './server/health.js';
 import { routeCommand, routeButton, routeModal, routeSelect } from './handlers/router.js';
 import { handleGuildMemberAdd, handleGuildMemberRemove } from './handlers/onboarding.js';
@@ -35,10 +36,37 @@ client.once('clientReady', async () => {
   logger.info(`Restored ${openCount.c} active calls.`);
   startMapFetchJob(client);
   startExpiryJob(client);
-  startBackupJob();
+  startBackupJob(client);
   startTimerTickJob(client);
   startMemberSyncJob(client);
+  catchUpStaleJobs(client).catch(err => logger.error('Startup catch-up failed:', err));
 });
+
+const STALE_MAP_FETCH_SEC = 25 * 3600; // 25h — covers the daily 24h gap plus jitter
+const STALE_MEMBER_SYNC_SEC = 13 * 3600; // 13h — sync runs every 12h
+
+async function catchUpStaleJobs(client) {
+  const now = unixNow();
+  const lastFetch = parseInt(getConfig('last_fetch_at') ?? '0', 10);
+  if (now - lastFetch > STALE_MAP_FETCH_SEC) {
+    logger.info(`Startup: map data is stale (last fetch ${lastFetch || 'never'}) — fetching now`);
+    try {
+      await fetchMapWithRetry();
+    } catch (err) {
+      logger.warn('Startup map fetch failed:', err.message);
+      return; // skip sync if fetch failed — would run against stale data
+    }
+  }
+  const lastSync = parseInt(getConfig('last_sync_at') ?? '0', 10);
+  if (now - lastSync > STALE_MEMBER_SYNC_SEC) {
+    logger.info(`Startup: member sync is stale (last sync ${lastSync || 'never'}) — running now`);
+    try {
+      await runMemberSync(client);
+    } catch (err) {
+      logger.warn('Startup member sync failed:', err.message);
+    }
+  }
+}
 
 client.on(Events.ShardDisconnect, (event, shardId) => {
   logger.warn(`Shard ${shardId} disconnected (code ${event?.code})`);
