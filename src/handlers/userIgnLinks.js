@@ -88,6 +88,7 @@ export function adminLink(discordId, input) {
   if (!validation.ok) return validation;
   const canonical = validation.canonical;
 
+  let isPrimary = false;
   const run = transaction(() => {
     ensureUser(discordId);
     upsertAccountFromMap(canonical);
@@ -95,16 +96,26 @@ export function adminLink(discordId, input) {
     const existing = prepare(`
       SELECT is_primary FROM user_ign_links WHERE discord_id = ? AND ign = ?
     `).get(discordId, canonical);
-    if (existing) return; // idempotent no-op
+    if (existing) {
+      isPrimary = existing.is_primary === 1;
+      return; // idempotent no-op
+    }
+
+    // If the user has no primary yet, this new link becomes their primary.
+    // Otherwise it's secondary (admin can flip later with /admin set-primary).
+    const hasPrimary = prepare(
+      'SELECT 1 FROM user_ign_links WHERE discord_id = ? AND is_primary = 1',
+    ).get(discordId);
+    isPrimary = !hasPrimary;
 
     prepare(`
       INSERT INTO user_ign_links (discord_id, ign, is_primary, source)
-      VALUES (?, ?, 0, 'admin')
-    `).run(discordId, canonical);
+      VALUES (?, ?, ?, 'admin')
+    `).run(discordId, canonical, isPrimary ? 1 : 0);
   });
   run();
 
-  return { ok: true, canonical };
+  return { ok: true, canonical, isPrimary };
 }
 
 export function adminUnlink(discordId, input) {
@@ -112,6 +123,7 @@ export function adminUnlink(discordId, input) {
   if (!account) return { ok: false, reason: 'no_account' };
   const canonical = account.ign;
 
+  let promotedPrimary = null; // ign of the link promoted to primary, if any
   const run = transaction(() => {
     const removed = prepare(`
       SELECT is_primary FROM user_ign_links WHERE discord_id = ? AND ign = ?
@@ -129,12 +141,13 @@ export function adminUnlink(discordId, input) {
       if (next) {
         prepare('UPDATE user_ign_links SET is_primary = 1 WHERE discord_id = ? AND ign = ?')
           .run(discordId, next.ign);
+        promotedPrimary = next.ign;
       }
     }
   });
   run();
 
-  return { ok: true, canonical };
+  return { ok: true, canonical, promotedPrimary };
 }
 
 export function adminSetPrimary(discordId, input) {

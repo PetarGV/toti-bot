@@ -18,8 +18,8 @@ import { adminLink, adminUnlink, adminSetPrimary, getAllLinksForUser, getPrimary
 import { upsertAccountFromMap } from '../handlers/travianAccounts.js';
 import { buildSyncResolveButtons } from '../handlers/syncResolve.js';
 import { normalizeIgn } from '../utils/ign.js';
-import { applyCoordsAndDeriveTribe } from '../handlers/onboarding.js';
-import { findUnlinkedTbds } from '../handlers/memberRoles.js';
+import { applyCoordsAndDeriveTribe, renameOnboardingChannel, updateOnboardingChannelTopic } from '../handlers/onboarding.js';
+import { assignRolesFromIgn, findUnlinkedTbds } from '../handlers/memberRoles.js';
 import { applyMemberSyncRoles } from '../jobs/memberSync.js';
 import { CREW_ROLE_NAMES } from '../utils/roleSelection.js';
 
@@ -49,6 +49,27 @@ function ambiguousLine(row) {
 
 function conflictLine(row) {
   return `<@${row.member.id}> has profile **${row.existingIgn}**, matched **${row.player.player}**`;
+}
+
+// Assign tribe + alliance roles for a user's new primary IGN, rename the
+// onboarding channel, refresh its topic. Returns a short " ... assigned"
+// suffix the slash-reply can append.
+async function applyPrimaryIgnRoles(guild, discordId, ign) {
+  if (!guild) return '';
+  const member = await guild.members.fetch(discordId).catch(() => null);
+  if (!member) return '';
+  try {
+    const roles = await assignRolesFromIgn({ member, ign });
+    const parts = [];
+    if (roles.tribeAssigned) parts.push(`tribe role **${roles.tribeName}**`);
+    if (roles.allianceAssigned) parts.push(`**${roles.allianceRoleName}** role`);
+    await renameOnboardingChannel(discordId, ign, guild);
+    await updateOnboardingChannelTopic(discordId, ign, guild);
+    return parts.length ? ` ${parts.join(' and ')} assigned.` : '';
+  } catch (err) {
+    logger.warn(`applyPrimaryIgnRoles: ${discordId} / ${ign}: ${err.message}`);
+    return '';
+  }
 }
 
 export function applyMemberMapProfileMatches(audit) {
@@ -329,7 +350,14 @@ export async function handleAdmin(interaction) {
           : `❌ Could not link.`;
       return interaction.reply({ content: msg, ephemeral: true });
     }
-    return interaction.reply({ content: `✅ Linked <@${target.id}> ↔ **${result.canonical}** (secondary).`, ephemeral: true });
+    const label = result.isPrimary ? 'primary' : 'secondary';
+    const roleNote = result.isPrimary
+      ? await applyPrimaryIgnRoles(interaction.guild, target.id, result.canonical)
+      : '';
+    return interaction.reply({
+      content: `✅ Linked <@${target.id}> ↔ **${result.canonical}** (${label}).${roleNote}`,
+      ephemeral: true,
+    });
   }
 
   if (sub === 'unlink') {
@@ -337,7 +365,15 @@ export async function handleAdmin(interaction) {
     const ign    = interaction.options.getString('ign').trim();
     const result = adminUnlink(target.id, ign);
     if (!result.ok) return interaction.reply({ content: '❌ That IGN isn\'t in the account table.', ephemeral: true });
-    return interaction.reply({ content: `✅ Unlinked <@${target.id}> from **${result.canonical}**.`, ephemeral: true });
+    let extra = '';
+    if (result.promotedPrimary) {
+      const roleNote = await applyPrimaryIgnRoles(interaction.guild, target.id, result.promotedPrimary);
+      extra = ` Primary is now **${result.promotedPrimary}**.${roleNote}`;
+    }
+    return interaction.reply({
+      content: `✅ Unlinked <@${target.id}> from **${result.canonical}**.${extra}`,
+      ephemeral: true,
+    });
   }
 
   if (sub === 'set-primary') {
@@ -350,7 +386,11 @@ export async function handleAdmin(interaction) {
         : `❌ That IGN isn't in the account table.`;
       return interaction.reply({ content: msg, ephemeral: true });
     }
-    return interaction.reply({ content: `✅ Primary IGN for <@${target.id}> is now **${result.canonical}**.`, ephemeral: true });
+    const roleNote = await applyPrimaryIgnRoles(interaction.guild, target.id, result.canonical);
+    return interaction.reply({
+      content: `✅ Primary IGN for <@${target.id}> is now **${result.canonical}**.${roleNote}`,
+      ephemeral: true,
+    });
   }
 
   if (sub === 'set-welcome-channel') {
