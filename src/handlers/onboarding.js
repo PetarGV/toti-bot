@@ -60,6 +60,7 @@ async function createMemberOnboardingChannel(member) {
       type: ChannelType.GuildText,
       parent: categoryId,
       permissionOverwrites,
+      topic: `Onboarding | Discord: ${member.displayName} | IGN: (pending)`,
     });
     prepare('INSERT OR IGNORE INTO users (discord_id) VALUES (?)').run(member.id);
     prepare('UPDATE users SET onboarding_channel_id = ? WHERE discord_id = ?').run(channel.id, member.id);
@@ -88,6 +89,20 @@ export async function renameOnboardingChannel(discordId, ign, guild) {
     if (channel) await channel.setName(safeChannelName(ign));
   } catch (err) {
     logger.warn(`renameOnboardingChannel: ${discordId} → ${ign}: ${err.message}`);
+  }
+}
+
+export async function updateOnboardingChannelTopic(discordId, ign, guild) {
+  const row = prepare('SELECT onboarding_channel_id FROM users WHERE discord_id = ?').get(discordId);
+  if (!row?.onboarding_channel_id) return;
+  try {
+    const channel = await guild.channels.fetch(row.onboarding_channel_id);
+    if (!channel) return;
+    const guildMember = await guild.members.fetch(discordId).catch(() => null);
+    const displayName = guildMember?.displayName ?? discordId;
+    await channel.setTopic(`Onboarding | Discord: ${displayName} | IGN: ${ign}`);
+  } catch (err) {
+    logger.warn(`updateOnboardingChannelTopic: ${discordId} → ${ign}: ${err.message}`);
   }
 }
 
@@ -277,6 +292,7 @@ export async function handleOnboardSaveIgnModal(interaction) {
     if (parts.length) roleNote = ` ${parts.join(' and ')} assigned.`;
     if (interaction.guild) {
       await renameOnboardingChannel(interaction.user.id, result.canonical, interaction.guild);
+      await updateOnboardingChannelTopic(interaction.user.id, result.canonical, interaction.guild);
     }
   }
   return interaction.reply({ content: `✅ IGN set to **${result.canonical}**.${roleNote} Click **Continue ➡** on the wizard to move to Step 2.`, ephemeral: true });
@@ -413,8 +429,9 @@ export async function handleGuildMemberAdd(member) {
   if (privateChannel && autoIgn) {
     try {
       await privateChannel.setName(safeChannelName(autoIgn));
+      await privateChannel.setTopic(`Onboarding | Discord: ${member.displayName} | IGN: ${autoIgn}`);
     } catch (err) {
-      logger.warn(`guildMemberAdd: could not rename onboarding channel to IGN: ${err.message}`);
+      logger.warn(`guildMemberAdd: could not update onboarding channel: ${err.message}`);
     }
   }
 

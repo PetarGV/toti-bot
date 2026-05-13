@@ -8,7 +8,7 @@ import { upsertAccountFromMap, validateIgnAgainstMap } from './travianAccounts.j
 import { normalizeIgn } from '../utils/ign.js';
 import { buildMemberMapAudit, getTravianPlayersFromMap } from '../utils/memberMapMonitor.js';
 import { assignRolesFromIgn } from './memberRoles.js';
-import { renameOnboardingChannel } from './onboarding.js';
+import { renameOnboardingChannel, updateOnboardingChannelTopic } from './onboarding.js';
 import { logger } from '../utils/logger.js';
 
 export function buildSyncResolveButtons({ adminId, conflicts, ambiguous }) {
@@ -271,6 +271,7 @@ export async function handleAmbigIgnModal(interaction) {
     }
     if (interaction.guild) {
       await renameOnboardingChannel(discordId, pickedIgn, interaction.guild);
+      await updateOnboardingChannelTopic(discordId, pickedIgn, interaction.guild);
     }
     return interaction.reply({ content: `✅ Linked <@${discordId}> → **${pickedIgn}**.${roleNote}`, ephemeral: true });
   }
@@ -316,6 +317,7 @@ export async function handleActButton(interaction) {
     }
     if (interaction.guild) {
       await renameOnboardingChannel(discordId, targetIgn, interaction.guild);
+      await updateOnboardingChannelTopic(discordId, targetIgn, interaction.guild);
     }
   }
   return interaction.update({
