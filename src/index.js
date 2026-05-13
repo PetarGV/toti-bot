@@ -13,7 +13,7 @@ import { startTimerTickJob } from './jobs/timerTick.js';
 import { startMemberSyncJob } from './jobs/memberSync.js';
 import { startHealthServer, stopHealthServer } from './server/health.js';
 import { routeCommand, routeButton, routeModal, routeSelect } from './handlers/router.js';
-import { handleGuildMemberAdd } from './handlers/onboarding.js';
+import { handleGuildMemberAdd, handleGuildMemberRemove } from './handlers/onboarding.js';
 import { refreshOpenCalls } from './handlers/calls.js';
 import { logger, flushLogs } from './utils/logger.js';
 import { recordError } from './utils/metrics.js';
@@ -66,6 +66,15 @@ client.on(Events.GuildMemberAdd, async (member) => {
     await handleGuildMemberAdd(member);
   } catch (err) {
     logger.error('guildMemberAdd handler crashed:', err);
+    recordError(err);
+  }
+});
+
+client.on(Events.GuildMemberRemove, async (member) => {
+  try {
+    await handleGuildMemberRemove(member);
+  } catch (err) {
+    logger.error('guildMemberRemove handler crashed:', err);
     recordError(err);
   }
 });

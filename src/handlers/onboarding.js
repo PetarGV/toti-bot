@@ -91,6 +91,20 @@ export async function renameOnboardingChannel(discordId, ign, guild) {
   }
 }
 
+export async function handleGuildMemberRemove(member) {
+  if (member.user?.bot) return;
+  const row = prepare('SELECT onboarding_channel_id FROM users WHERE discord_id = ?').get(member.id);
+  if (!row?.onboarding_channel_id) return;
+  try {
+    const channel = await member.guild.channels.fetch(row.onboarding_channel_id).catch(() => null);
+    if (channel) await channel.delete();
+    prepare('UPDATE users SET onboarding_channel_id = NULL WHERE discord_id = ?').run(member.id);
+    logger.info(`guildMemberRemove: deleted onboarding channel for ${member.user?.tag ?? member.id}`);
+  } catch (err) {
+    logger.warn(`guildMemberRemove: could not delete onboarding channel for ${member.id}: ${err.message}`);
+  }
+}
+
 function hasCrewRole(memberRoleNames) {
   const lowered = new Set((memberRoleNames ?? []).map(n => String(n).trim().toLowerCase()));
   return CREW_ROLE_NAMES.some(name => lowered.has(name.toLowerCase()));
