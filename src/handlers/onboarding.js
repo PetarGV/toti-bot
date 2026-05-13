@@ -320,7 +320,7 @@ function getRolesPanelUrl(guildId) {
 }
 
 function buildLeadershipMentions(guild) {
-  if (!guild?.roles?.cache) return '';
+  if (!guild?.roles?.cache) return { mentionString: '', memberIds: [] };
 
   const leadershipRoles = LEADERSHIP_ROLE_NAMES
     .map(name => guild.roles.cache.find(r => r.name === name))
@@ -338,16 +338,16 @@ function buildLeadershipMentions(guild) {
     }
   }
 
-  return mentions.join(' ');
+  return { mentionString: mentions.join(' '), memberIds: Array.from(mentionedIds) };
 }
 
 async function sendLeadershipIntro(channel, member, autoIgn) {
   try {
-    const mentions = buildLeadershipMentions(member.guild);
+    const { mentionString, memberIds } = buildLeadershipMentions(member.guild);
     const lines = [];
 
-    if (mentions) {
-      lines.push(mentions);
+    if (mentionString) {
+      lines.push(mentionString);
     }
 
     lines.push(`New member: **${member.displayName}**`);
@@ -357,10 +357,6 @@ async function sendLeadershipIntro(channel, member, autoIgn) {
     } else {
       lines.push(`IGN: *not yet linked*`);
     }
-
-    const memberIds = Array.from(member.guild.roles.cache
-      .filter(r => LEADERSHIP_ROLE_NAMES.includes(r.name))
-      .flatMap(r => Array.from(r.members.keys())));
 
     await channel.send({
       content: lines.join('\n'),
