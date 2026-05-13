@@ -24,6 +24,17 @@ export function runMigrations() {
     }
   }
 
+  try {
+    exec(`
+      CREATE TABLE IF NOT EXISTS sync_exclusions (
+        discord_id TEXT PRIMARY KEY,
+        added_at   INTEGER DEFAULT (unixepoch())
+      )
+    `);
+  } catch (err) {
+    logger.warn('Migration sync_exclusions table skipped:', err.message);
+  }
+
   if (!hasColumn('users', 'onboarding_channel_id')) {
     try {
       exec('ALTER TABLE users ADD COLUMN onboarding_channel_id TEXT');

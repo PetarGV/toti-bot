@@ -98,6 +98,20 @@ export const commandDefinitions = [
       s.setName('map-search')
         .setDescription('Look up a player name directly in the Travian map data')
         .addStringOption(o => o.setName('ign').setDescription('Player name (partial match)').setRequired(true))
+    )
+    .addSubcommand(s =>
+      s.setName('sync-exclude')
+        .setDescription('Exclude a member from automatic sync (they will never be auto-linked)')
+        .addUserOption(o => o.setName('discord').setDescription('Discord user').setRequired(true))
+    )
+    .addSubcommand(s =>
+      s.setName('sync-unexclude')
+        .setDescription('Remove a member from the sync exclusion list')
+        .addUserOption(o => o.setName('discord').setDescription('Discord user').setRequired(true))
+    )
+    .addSubcommand(s =>
+      s.setName('sync-excluded-list')
+        .setDescription('Show all members currently excluded from automatic sync')
     ),
 
   // ── Slash mirrors of panel buttons ──────────────────────────────────────

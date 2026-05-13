@@ -188,8 +188,11 @@ export async function handleAdmin(interaction) {
       });
     }
 
+    const excluded = new Set(
+      prepare('SELECT discord_id FROM sync_exclusions').all().map(r => r.discord_id),
+    );
     const members = Array.from(memberCollection.values())
-      .filter(member => !member.user?.bot);
+      .filter(member => !member.user?.bot && !excluded.has(member.id));
     const audit = buildMemberMapAudit(members, players);
     const unresolvedAmbiguous = audit.ambiguous.filter(row => !getPrimaryLinkForUser(row.member.id));
     const updateProfiles = interaction.options.getBoolean('update-profiles') ?? true;
@@ -471,6 +474,29 @@ export async function handleAdmin(interaction) {
       content: `Profile check for <@${target.id}>:\n${lines.join('\n')}`,
       ephemeral: true,
     });
+  }
+
+  if (sub === 'sync-exclude') {
+    const target = interaction.options.getUser('discord');
+    prepare('INSERT OR IGNORE INTO sync_exclusions (discord_id) VALUES (?)').run(target.id);
+    return interaction.reply({ content: `✅ <@${target.id}> excluded from automatic sync.`, ephemeral: true });
+  }
+
+  if (sub === 'sync-unexclude') {
+    const target = interaction.options.getUser('discord');
+    const result = prepare('DELETE FROM sync_exclusions WHERE discord_id = ?').run(target.id);
+    const msg = result.changes > 0
+      ? `✅ <@${target.id}> removed from sync exclusion list.`
+      : `ℹ️ <@${target.id}> wasn't on the exclusion list.`;
+    return interaction.reply({ content: msg, ephemeral: true });
+  }
+
+  if (sub === 'sync-excluded-list') {
+    const rows = prepare('SELECT discord_id FROM sync_exclusions ORDER BY added_at').all();
+    const content = rows.length
+      ? `**Excluded from sync (${rows.length}):**\n${rows.map(r => `<@${r.discord_id}>`).join('\n')}`
+      : 'No members are currently excluded from sync.';
+    return interaction.reply({ content, ephemeral: true });
   }
 
   if (sub === 'map-search') {

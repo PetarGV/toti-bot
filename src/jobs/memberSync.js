@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { EmbedBuilder } from 'discord.js';
-import { getConfig } from '../db/client.js';
+import { getConfig, prepare } from '../db/client.js';
 import { logger } from '../utils/logger.js';
 import { COLORS, FOOTER } from '../utils/i18n.js';
 import { getTravianPlayersFromMap, buildMemberMapAudit } from '../utils/memberMapMonitor.js';
@@ -30,7 +30,11 @@ async function runMemberSync(client) {
     return;
   }
 
-  const members = Array.from(memberCollection.values()).filter(m => !m.user?.bot);
+  const excluded = new Set(
+    prepare('SELECT discord_id FROM sync_exclusions').all().map(r => r.discord_id),
+  );
+  const members = Array.from(memberCollection.values())
+    .filter(m => !m.user?.bot && !excluded.has(m.id));
   const audit = buildMemberMapAudit(members, players);
   const profileSync = applyMemberMapProfileMatches(audit);
   const unresolvedAmbiguous = audit.ambiguous.filter(row => !getPrimaryLinkForUser(row.member.id));
