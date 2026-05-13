@@ -54,6 +54,26 @@ async function runMemberSync(client) {
     await renameOnboardingChannel(row.member.id, row.player.player, guild);
   }
 
+  // Refresh roles for all members currently linked in DB who weren't already processed
+  const processedIds = new Set([
+    ...profileSync.updated.map(r => r.member.id),
+    ...profileSync.alreadyLinked.map(r => r.member.id),
+  ]);
+  const allPrimaryLinks = prepare(
+    'SELECT discord_id, ign FROM user_ign_links WHERE is_primary = 1'
+  ).all();
+  for (const link of allPrimaryLinks) {
+    if (processedIds.has(link.discord_id) || excluded.has(link.discord_id)) continue;
+    const discordMember = memberCollection.get(link.discord_id);
+    if (!discordMember) continue; // member left the server
+    try {
+      const roles = await assignRolesFromIgn({ member: discordMember, ign: link.ign });
+      if (roles.tribeAssigned || roles.allianceAssigned) rolesAssigned++;
+    } catch (err) {
+      logger.warn(`memberSync: role refresh failed for ${link.discord_id}: ${err.message}`);
+    }
+  }
+
   logger.info(
     `memberSync: ${audit.matched.length} matched, ${profileSync.updated.length} new links, ` +
     `${rolesAssigned} roles assigned, ${unresolvedAmbiguous.length} ambiguous, ${audit.unmatched.length} unmatched`,
