@@ -18,7 +18,6 @@ import {
 const MODAL_ID = 'nearby:lookup';
 const MAX_EMBED_DESCRIPTION = 3900;
 const TABLE_COLUMNS = [
-  { key: 'number', label: '#', width: 2 },
   { key: 'coords', label: 'Coord', width: 9 },
   { key: 'distance', label: 'Dist', width: 5, align: 'right' },
   { key: 'tag', label: 'Tag', width: 6 },
@@ -182,8 +181,8 @@ export function buildNearbyEmbeds(center, result, fetchedAt) {
 
 function buildTableRows(result) {
   const rows = [];
-  if (result.centerVillage) rows.push(formatTableRow(result.centerVillage, 'C'));
-  rows.push(...result.villages.map((row, index) => formatTableRow(row, String(index + 1))));
+  if (result.centerVillage) rows.push(formatTableRow(result.centerVillage));
+  rows.push(...result.villages.map((row) => formatTableRow(row)));
   return rows;
 }
 
@@ -191,13 +190,14 @@ function buildTableChunks(rows) {
   const header = formatTableHeader();
   const separator = TABLE_COLUMNS.map((column) => '-'.repeat(column.width)).join(' ');
   const chunks = [];
+  // Each chunk: header, separator, then for each row: row + trailing separator.
   let current = [header, separator];
 
   for (const row of rows) {
-    const next = [...current, row];
+    const next = [...current, row, separator];
     if (wrapCodeBlock(next).length > MAX_EMBED_DESCRIPTION && current.length > 2) {
       chunks.push(wrapCodeBlock(current));
-      current = [header, separator, row];
+      current = [header, separator, row, separator];
     } else {
       current = next;
     }
@@ -215,9 +215,8 @@ function formatTableHeader() {
   return TABLE_COLUMNS.map((column) => formatCell(column.label, column)).join(' ');
 }
 
-function formatTableRow(row, number) {
+function formatTableRow(row) {
   const values = {
-    number,
     coords: formatCoords(row.x, row.y),
     distance: Number(row.distance ?? 0).toFixed(1),
     tag: row.populationTag || '',
@@ -226,7 +225,6 @@ function formatTableRow(row, number) {
     villagePopulation: formatPopulation(row.population),
     playerPopulation: row.playerPopulation == null ? '' : formatPopulation(row.playerPopulation),
     tribe: getTribe(row.tid).name,
-    village: row.village || 'Unnamed village',
   };
 
   return TABLE_COLUMNS.map((column) => formatCell(values[column.key], column)).join(' ');
