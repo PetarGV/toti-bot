@@ -18,7 +18,7 @@ test('normalizeNearbyOptions applies defaults and clamps bounds', () => {
   assert.deepEqual(normalizeNearbyOptions(), { radius: 10, limit: 10 });
   assert.deepEqual(normalizeNearbyOptions({ radius: null, limit: null }), { radius: 10, limit: 10 });
   assert.deepEqual(normalizeNearbyOptions({ radius: 0, limit: 0 }), { radius: 1, limit: 1 });
-  assert.deepEqual(normalizeNearbyOptions({ radius: 99, limit: 99 }), { radius: 50, limit: 20 });
+  assert.deepEqual(normalizeNearbyOptions({ radius: 99, limit: 99 }), { radius: 50, limit: 50 });
   assert.deepEqual(normalizeNearbyOptions({ radius: '12', limit: '7' }), { radius: 12, limit: 7 });
 });
 
@@ -63,4 +63,39 @@ test('searchNearbyRows returns an empty result when nothing is inside the radius
   assert.deepEqual(result.villages, []);
   assert.equal(result.totalInRadius, 0);
   assert.equal(result.totalNearbyInRadius, 0);
+});
+
+test('searchNearbyRows labels players from total population compared to the requester', () => {
+  const rows = [
+    { id: 1, x: 0, y: 0, tid: 1, village: 'Home', player: 'Me', alliance: 'ALLY', population: 900 },
+    { id: 2, x: 1, y: 0, tid: 2, village: 'Small Farm', player: 'Small', alliance: 'FARM', population: 100 },
+    { id: 3, x: 2, y: 0, tid: 3, village: 'Middle', player: 'Middle', alliance: 'MID', population: 400 },
+    { id: 4, x: 3, y: 0, tid: 6, village: 'Large Threat', player: 'Large', alliance: 'BAD', population: 800 },
+  ];
+
+  const result = searchNearbyRows({ x: 0, y: 0 }, rows, {
+    radius: 5,
+    limit: 10,
+    comparisonPlayer: 'Me',
+    comparisonPopulation: 10000,
+    playerPopulationTotals: new Map([
+      ['Me', 10000],
+      ['Small', 1900],
+      ['Middle', 5000],
+      ['Large', 8100],
+    ]),
+  });
+
+  assert.equal(result.comparisonPlayer, 'Me');
+  assert.equal(result.comparisonPopulation, 10000);
+  assert.equal(result.centerVillage.populationTag, '');
+  assert.equal(result.centerVillage.playerPopulation, 10000);
+  assert.deepEqual(
+    result.villages.map((row) => [row.player, row.playerPopulation, row.populationTag]),
+    [
+      ['Small', 1900, 'FARM'],
+      ['Middle', 5000, ''],
+      ['Large', 8100, 'THREAT'],
+    ],
+  );
 });

@@ -5,7 +5,7 @@ const DEFAULT_LIMIT = 10;
 const MIN_RADIUS = 1;
 const MAX_RADIUS = 50;
 const MIN_LIMIT = 1;
-const MAX_LIMIT = 20;
+const MAX_LIMIT = 50;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
@@ -21,6 +21,29 @@ function integerOrFallback(value, fallback) {
 function numeric(value, fallback = 0) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
+}
+
+function getPlayerPopulationTotal(player, playerPopulationTotals) {
+  if (!player || !playerPopulationTotals) return null;
+  if (playerPopulationTotals instanceof Map) {
+    return playerPopulationTotals.has(player)
+      ? numeric(playerPopulationTotals.get(player), 0)
+      : null;
+  }
+  if (Object.hasOwn(playerPopulationTotals, player)) {
+    return numeric(playerPopulationTotals[player], 0);
+  }
+  return null;
+}
+
+function getPopulationTag(row, comparisonPlayer, comparisonPopulation, playerPopulation) {
+  if (!comparisonPlayer || comparisonPopulation <= 0 || !row.player || playerPopulation == null) return '';
+  if (String(row.player) === String(comparisonPlayer)) return '';
+
+  const ratio = playerPopulation / comparisonPopulation;
+  if (ratio < 0.2) return 'FARM';
+  if (ratio > 0.8) return 'THREAT';
+  return '';
 }
 
 export function normalizeNearbyOptions(options = {}) {
@@ -57,6 +80,8 @@ function compareNearbyRows(a, b) {
 
 export function searchNearbyRows(center, rows, options = {}) {
   const normalized = normalizeNearbyOptions(options);
+  const comparisonPlayer = options.comparisonPlayer ?? null;
+  const comparisonPopulation = numeric(options.comparisonPopulation, 0);
   const exactMatches = [];
   const nearby = [];
 
@@ -64,7 +89,13 @@ export function searchNearbyRows(center, rows, options = {}) {
     const distance = distanceFields(center, row);
     if (distance > normalized.radius) continue;
 
-    const enriched = { ...row, distance };
+    const playerPopulation = getPlayerPopulationTotal(row.player, options.playerPopulationTotals);
+    const enriched = {
+      ...row,
+      distance,
+      playerPopulation,
+      populationTag: getPopulationTag(row, comparisonPlayer, comparisonPopulation, playerPopulation),
+    };
     if (numeric(row.x) === numeric(center.x) && numeric(row.y) === numeric(center.y)) {
       exactMatches.push(enriched);
     } else {
@@ -79,6 +110,8 @@ export function searchNearbyRows(center, rows, options = {}) {
     center: { x: numeric(center.x), y: numeric(center.y) },
     radius: normalized.radius,
     limit: normalized.limit,
+    comparisonPlayer,
+    comparisonPopulation: comparisonPopulation > 0 ? comparisonPopulation : null,
     centerVillage: exactMatches[0] ?? null,
     villages: nearby.slice(0, normalized.limit),
     totalInRadius: exactMatches.length + nearby.length,
@@ -96,8 +129,24 @@ export function getLastMapFetchedAt() {
   return Number.isFinite(value) && value > 0 ? value : null;
 }
 
+export function getPlayerPopulationTotals(players) {
+  const uniquePlayers = [...new Set(players.filter(Boolean).map(String))];
+  if (uniquePlayers.length === 0) return new Map();
+
+  const placeholders = uniquePlayers.map(() => '?').join(', ');
+  const rows = prepare(`
+    SELECT player, SUM(COALESCE(population, 0)) AS population
+    FROM x_world
+    WHERE player IN (${placeholders})
+    GROUP BY player
+  `).all(...uniquePlayers);
+
+  return new Map(rows.map((row) => [row.player, numeric(row.population, 0)]));
+}
+
 export function findNearbyVillages(center, options = {}) {
   const normalized = normalizeNearbyOptions(options);
+  const comparisonPlayer = options.comparisonPlayer ?? null;
   const rows = prepare(`
     SELECT id, x, y, tid, vid, village, uid, player, aid, alliance, population, fetched_at
     FROM x_world
@@ -110,5 +159,18 @@ export function findNearbyVillages(center, options = {}) {
     center.y + normalized.radius,
   );
 
-  return searchNearbyRows(center, rows, normalized);
+  const playerPopulationTotals = getPlayerPopulationTotals([
+    comparisonPlayer,
+    ...rows.map((row) => row.player),
+  ]);
+  const comparisonPopulation = comparisonPlayer
+    ? playerPopulationTotals.get(String(comparisonPlayer)) ?? 0
+    : 0;
+
+  return searchNearbyRows(center, rows, {
+    ...normalized,
+    comparisonPlayer,
+    comparisonPopulation,
+    playerPopulationTotals,
+  });
 }

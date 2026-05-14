@@ -6,8 +6,8 @@ import {
   TextInputStyle,
 } from 'discord.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
-import { mapUrl } from '../utils/travianUrl.js';
 import { getTribe } from '../utils/tribes.js';
+import { getPrimaryLinkForUser } from './userIgnLinks.js';
 import {
   findNearbyVillages,
   getLastMapFetchedAt,
@@ -16,6 +16,19 @@ import {
 } from '../utils/mapSearch.js';
 
 const MODAL_ID = 'nearby:lookup';
+const MAX_EMBED_DESCRIPTION = 3900;
+const TABLE_COLUMNS = [
+  { key: 'number', label: '#', width: 2 },
+  { key: 'coords', label: 'Coord', width: 9 },
+  { key: 'distance', label: 'Dist', width: 5, align: 'right' },
+  { key: 'tag', label: 'Tag', width: 6 },
+  { key: 'player', label: 'Player', width: 14 },
+  { key: 'alliance', label: 'Ally', width: 6 },
+  { key: 'villagePopulation', label: 'VPop', width: 6, align: 'right' },
+  { key: 'playerPopulation', label: 'PPop', width: 7, align: 'right' },
+  { key: 'tribe', label: 'Tribe', width: 8 },
+  { key: 'village', label: 'Village', width: 18 },
+];
 
 export async function handleNearbyCommand(interaction) {
   const coords = interaction.options.getString('coords');
@@ -47,7 +60,7 @@ export async function handleNearbyButton(interaction) {
   const limitInput = new TextInputBuilder()
     .setCustomId('limit')
     .setLabel('Result limit')
-    .setPlaceholder('Default: 10, max: 20')
+    .setPlaceholder('Default: 10, max: 50')
     .setStyle(TextInputStyle.Short)
     .setRequired(false)
     .setMaxLength(2);
@@ -102,7 +115,11 @@ async function renderNearby(interaction, coordsInput, rawOptions = {}) {
   }
 
   const options = normalizeNearbyOptions(rawOptions);
-  const result = findNearbyVillages(coords, options);
+  const primary = getPrimaryLinkForUser(interaction.user?.id);
+  const result = findNearbyVillages(coords, {
+    ...options,
+    comparisonPlayer: primary?.ign ?? null,
+  });
 
   if (!result.centerVillage && result.villages.length === 0) {
     return interaction.reply({
@@ -112,51 +129,120 @@ async function renderNearby(interaction, coordsInput, rawOptions = {}) {
   }
 
   const fetchedAt = getLastMapFetchedAt();
-  const embed = buildNearbyEmbed(coords, result, fetchedAt);
+  const embeds = buildNearbyEmbeds(coords, result, fetchedAt);
 
-  return interaction.reply({ embeds: [embed], ephemeral: true });
+  return interaction.reply({ embeds, ephemeral: true });
 }
 
 export function buildNearbyEmbed(center, result, fetchedAt) {
-  const shown = (result.centerVillage ? 1 : 0) + result.villages.length;
-  const sections = [];
-
-  if (result.centerVillage) {
-    sections.push(`**Center village**\n${formatVillageLine(result.centerVillage)}`);
-  }
-
-  if (result.villages.length) {
-    const nearbyLines = result.villages.map((row, index) => formatVillageLine(row, index + 1));
-    sections.push(`**Nearby villages**\n${nearbyLines.join('\n')}`);
-  }
-
-  const embed = new EmbedBuilder()
-    .setColor(0x3498db)
-    .setTitle(`Nearby villages around ${formatCoords(center.x, center.y)}`)
-    .setDescription(sections.join('\n\n'))
-    .addFields(
-      { name: 'Search center', value: formatCoords(center.x, center.y), inline: true },
-      { name: 'Radius', value: `${result.radius} fields`, inline: true },
-      { name: 'Shown', value: String(shown), inline: true },
-      { name: 'Found in radius', value: String(result.totalInRadius), inline: true },
-    );
-
-  if (fetchedAt) {
-    embed.setFooter({ text: 'Map data updated' }).setTimestamp(new Date(fetchedAt * 1000));
-  }
-
-  return embed;
+  return buildNearbyEmbeds(center, result, fetchedAt)[0];
 }
 
-function formatVillageLine(row, index = null) {
-  const prefix = index == null ? '' : `${index}. `;
-  const coords = `[${formatCoords(row.x, row.y)}](${mapUrl(row.x, row.y)})`;
-  const distance = `${Number(row.distance ?? 0).toFixed(1)} fields`;
-  const village = row.village || 'Unnamed village';
-  const player = row.player || 'Unoccupied';
-  const alliance = row.alliance ? ` [${row.alliance}]` : '';
-  const population = Number(row.population ?? 0).toLocaleString();
-  const tribe = getTribe(row.tid).name;
+export function buildNearbyEmbeds(center, result, fetchedAt) {
+  const shown = (result.centerVillage ? 1 : 0) + result.villages.length;
+  const tableChunks = buildTableChunks(buildTableRows(result));
 
-  return `${prefix}${coords} ${distance} - ${village} - ${player}${alliance} - ${population} pop - ${tribe}`;
+  return tableChunks.map((description, index) => {
+    const embed = new EmbedBuilder()
+      .setColor(0x3498db)
+      .setTitle(index === 0
+        ? `Nearby villages around ${formatCoords(center.x, center.y)}`
+        : `Nearby villages around ${formatCoords(center.x, center.y)} (continued)`)
+      .setDescription(description);
+
+    if (index === 0) {
+      embed.addFields(
+        { name: 'Search center', value: formatCoords(center.x, center.y), inline: true },
+        { name: 'Radius', value: `${result.radius} fields`, inline: true },
+        { name: 'Shown', value: String(shown), inline: true },
+        { name: 'Found in radius', value: String(result.totalInRadius), inline: true },
+      );
+
+      if (result.comparisonPlayer && result.comparisonPopulation) {
+        embed.addFields({
+          name: 'Population baseline',
+          value: `${result.comparisonPlayer}: ${formatPopulation(result.comparisonPopulation)} total pop`,
+          inline: true,
+        });
+      } else {
+        embed.addFields({
+          name: 'Population labels',
+          value: 'Link your IGN to enable population comparison.',
+          inline: false,
+        });
+      }
+    }
+
+    if (fetchedAt) {
+      embed.setFooter({ text: 'Map data updated' }).setTimestamp(new Date(fetchedAt * 1000));
+    }
+
+    return embed;
+  });
+}
+
+function buildTableRows(result) {
+  const rows = [];
+  if (result.centerVillage) rows.push(formatTableRow(result.centerVillage, 'C'));
+  rows.push(...result.villages.map((row, index) => formatTableRow(row, String(index + 1))));
+  return rows;
+}
+
+function buildTableChunks(rows) {
+  const header = formatTableHeader();
+  const separator = TABLE_COLUMNS.map((column) => '-'.repeat(column.width)).join(' ');
+  const chunks = [];
+  let current = [header, separator];
+
+  for (const row of rows) {
+    const next = [...current, row];
+    if (wrapCodeBlock(next).length > MAX_EMBED_DESCRIPTION && current.length > 2) {
+      chunks.push(wrapCodeBlock(current));
+      current = [header, separator, row];
+    } else {
+      current = next;
+    }
+  }
+
+  chunks.push(wrapCodeBlock(current));
+  return chunks;
+}
+
+function wrapCodeBlock(lines) {
+  return ['```text', ...lines, '```'].join('\n');
+}
+
+function formatTableHeader() {
+  return TABLE_COLUMNS.map((column) => formatCell(column.label, column)).join(' ');
+}
+
+function formatTableRow(row, number) {
+  const values = {
+    number,
+    coords: formatCoords(row.x, row.y),
+    distance: Number(row.distance ?? 0).toFixed(1),
+    tag: row.populationTag || '',
+    player: row.player || 'Unoccupied',
+    alliance: row.alliance || '',
+    villagePopulation: formatPopulation(row.population),
+    playerPopulation: row.playerPopulation == null ? '' : formatPopulation(row.playerPopulation),
+    tribe: getTribe(row.tid).name,
+    village: row.village || 'Unnamed village',
+  };
+
+  return TABLE_COLUMNS.map((column) => formatCell(values[column.key], column)).join(' ');
+}
+
+function formatCell(value, column) {
+  const text = truncateCell(String(value ?? '').replace(/\s+/g, ' ').trim(), column.width);
+  return column.align === 'right' ? text.padStart(column.width) : text.padEnd(column.width);
+}
+
+function truncateCell(value, width) {
+  return value.length > width ? value.slice(0, width) : value;
+}
+
+function formatPopulation(value) {
+  const n = Number(value ?? 0);
+  return Number.isFinite(n) ? String(Math.trunc(n)) : '';
 }
