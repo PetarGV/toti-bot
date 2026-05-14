@@ -55,6 +55,7 @@ import {
 import { handleLeaderboardCommand } from './leaderboard.js';
 import { handleTimerCommand } from './timer.js';
 import { handleHelpCommand, handleHelpSelect } from './help.js';
+import { handleTranslate } from './translate.js';
 import { handleRoleButton, handleRoleSelect } from './roles.js';
 import { ROLE_BUTTON_PREFIX, ROLE_SELECT_CUSTOM_ID } from '../utils/roleSelection.js';
 import { logger } from '../utils/logger.js';
@@ -101,6 +102,7 @@ export async function routeCommand(interaction) {
       case 'leaderboard': return await handleLeaderboardCommand(interaction);
       case 'timer':       return await handleTimerCommand(interaction);
       case 'help':        return await handleHelpCommand(interaction);
+      case 'translate':   return await handleTranslate(interaction);
       default:
         return await interaction.reply({ content: 'Unknown command.', ephemeral: true });
     }
