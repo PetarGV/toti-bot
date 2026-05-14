@@ -186,6 +186,15 @@ function buildTableRows(result) {
   return rows;
 }
 
+// Discord renders ANSI escape codes inside ```ansi``` code blocks.
+// 32 = green, 31 = red. 0 resets back to default. Everything else stays
+// in the channel's default text colour (the "neutral" case).
+function colorizeRow(line, tag) {
+  if (tag === 'FARM')   return `[32m${line}[0m`;
+  if (tag === 'THREAT') return `[31m${line}[0m`;
+  return line;
+}
+
 function buildTableChunks(rows) {
   const header = formatTableHeader();
   const separator = TABLE_COLUMNS.map((column) => '-'.repeat(column.width)).join(' ');
@@ -208,7 +217,7 @@ function buildTableChunks(rows) {
 }
 
 function wrapCodeBlock(lines) {
-  return ['```text', ...lines, '```'].join('\n');
+  return ['```ansi', ...lines, '```'].join('\n');
 }
 
 function formatTableHeader() {
@@ -227,7 +236,8 @@ function formatTableRow(row) {
     tribe: getTribe(row.tid).name,
   };
 
-  return TABLE_COLUMNS.map((column) => formatCell(values[column.key], column)).join(' ');
+  const line = TABLE_COLUMNS.map((column) => formatCell(values[column.key], column)).join(' ');
+  return colorizeRow(line, row.populationTag);
 }
 
 function formatCell(value, column) {

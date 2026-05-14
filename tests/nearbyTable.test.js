@@ -60,13 +60,16 @@ test('buildNearbyEmbed renders nearby rows as a code-block table with population
 
   const json = embed.toJSON();
 
-  assert.match(json.description, /^```text\n/);
+  assert.match(json.description, /^```ansi\n/);
   assert.match(json.description, /Tag/);
   assert.match(json.description, /VPop/);
   assert.match(json.description, /PPop/);
   assert.match(json.description, /Tribe/);
   assert.match(json.description, /FARM/);
   assert.match(json.description, /THREAT/);
+  // ANSI colour codes wrap FARM rows in green (32) and THREAT rows in red (31).
+  assert.match(json.description, /\[32m[^\n]*FARM[^\n]*\[0m/);
+  assert.match(json.description, /\[31m[^\n]*THREAT[^\n]*\[0m/);
   // Village name column dropped to keep the table from wrapping on a
   // typical Discord viewport.
   assert.doesNotMatch(json.description, /Small Farm|Large Threat/);
