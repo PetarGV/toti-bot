@@ -129,7 +129,15 @@ async function renderNearby(interaction, coordsInput, rawOptions = {}) {
   const fetchedAt = getLastMapFetchedAt();
   const embeds = buildNearbyEmbeds(coords, result, fetchedAt);
 
-  return interaction.reply({ embeds, ephemeral: true });
+  // Discord caps the total content of all embeds in a SINGLE message at
+  // 6000 chars. With high limits + the table format we can produce 2-3
+  // embeds whose sum exceeds that. Each followUp message gets its own
+  // 6000-char budget, so we split additional embeds into separate sends.
+  const [first, ...rest] = embeds;
+  await interaction.reply({ embeds: [first], ephemeral: true });
+  for (const embed of rest) {
+    await interaction.followUp({ embeds: [embed], ephemeral: true });
+  }
 }
 
 export function buildNearbyEmbed(center, result, fetchedAt) {
