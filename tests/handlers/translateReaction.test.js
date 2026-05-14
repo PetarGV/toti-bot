@@ -144,7 +144,9 @@ test('reaction creates a translation thread and posts an embed', async () => {
   const embed = message.thread._sent[0].embeds[0].toJSON();
   assert.equal(embed.title, '🇬🇧 EN-GB (from DE)');
   assert.match(embed.description, /Hello world/);
-  assert.match(embed.footer.text, /Triggered by <@alice>/);
+  // Mention must live in description (footers are plaintext and don't render <@id>).
+  assert.match(embed.description, /Triggered by <@alice>/);
+  assert.doesNotMatch(embed.footer.text, /<@/);
 });
 
 test('reaction reuses an existing message thread', async () => {
@@ -193,6 +195,21 @@ test('reaction prevents duplicate translations with memory dedup and thread scan
     message: makeMessage({ id: 'message-2', thread: scannedThread }),
   }), makeUser());
   assert.equal(scannedThread._sent.length, 0);
+
+  // Real discord.js stores the title at embed.data.title (APIEmbed shape).
+  // The previous fixture only exercised the legacy/top-level title fallback;
+  // exercise the primary path so regressions there don't go undetected.
+  _resetDedup();
+  const realShapeThread = makeThread({
+    messages: [{
+      author: { bot: true },
+      embeds: [{ data: { title: '🇬🇧 EN-GB (from DE)' } }],
+    }],
+  });
+  await handleTranslateReaction(makeReaction({
+    message: makeMessage({ id: 'message-3', thread: realShapeThread }),
+  }), makeUser());
+  assert.equal(realShapeThread._sent.length, 0);
 });
 
 test('reaction exits silently for missing permissions, empty content, oversize content, and DeepL errors', async () => {
@@ -241,7 +258,8 @@ test('reaction shares cache across messages and rate limits per user', async () 
   }), makeUser({ id: 'b' }));
 
   assert.equal(fetchCalls, 1);
-  assert.match(secondThread._sent[0].embeds[0].toJSON().footer.text, /cached/);
+  // 'cached' indicator now lives in description alongside the trigger mention.
+  assert.match(secondThread._sent[0].embeds[0].toJSON().description, /cached/);
 
   for (let i = 0; i < 10; i++) {
     await handleTranslateReaction(makeReaction({

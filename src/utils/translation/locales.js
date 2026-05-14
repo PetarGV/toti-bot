@@ -45,9 +45,14 @@ const FLAG_TO_DEEPL = {
   '🇧🇷': 'PT-BR',
 };
 
-const DEEPL_TO_FLAG = Object.fromEntries(
-  Object.entries(FLAG_TO_DEEPL).map(([flag, code]) => [code, flag]),
-);
+// DeepL's `detected_source_language` returns bare codes (EN, PT) without
+// the regional suffix, so we add explicit fallbacks to those so source
+// flags still render when DeepL doesn't tell us EN-GB vs EN-US.
+const DEEPL_TO_FLAG = {
+  ...Object.fromEntries(Object.entries(FLAG_TO_DEEPL).map(([flag, code]) => [code, flag])),
+  EN: '🇬🇧',
+  PT: '🇵🇹',
+};
 
 const LABELS = {
   'EN-GB': 'English (UK)',

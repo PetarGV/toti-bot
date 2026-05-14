@@ -65,6 +65,14 @@ test('flagForLang returns the primary flag for supported languages', () => {
   assert.equal(flagForLang(undefined), '');
 });
 
+test('flagForLang covers bare DeepL detection codes (EN, PT)', () => {
+  // DeepL's detected_source_language returns bare codes without a regional
+  // suffix; without these fallbacks the slash command footer would show
+  // "EN → 🇬🇧 EN-GB" instead of "🇬🇧 EN → 🇬🇧 EN-GB".
+  assert.equal(flagForLang('EN'), '🇬🇧');
+  assert.equal(flagForLang('PT'), '🇵🇹');
+});
+
 test('langChoices produces Discord-shaped choice objects for all supported languages', () => {
   const choices = langChoices();
   assert.equal(choices.length, SUPPORTED_LANGS.length);

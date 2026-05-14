@@ -160,17 +160,15 @@ function addDedup(key) {
 }
 
 function buildReactionEmbed({ emoji, targetLang, detectedSourceLang, translatedText, user, fromCache }) {
-  const footer = [
-    `Triggered by <@${user.id}>`,
-    fromCache ? 'cached' : null,
-    FOOTER,
-  ].filter(Boolean).join(' | ');
+  // Mention goes in description (footer is plaintext and won't render <@id>).
+  const trigger = `_Triggered by <@${user.id}>${fromCache ? ' · cached' : ''}_`;
+  const description = `${truncate(translatedText, 3800)}\n\n${trigger}`;
 
   return new EmbedBuilder()
     .setTitle(`${emoji} ${targetLang} (from ${detectedSourceLang || '??'})`)
     .setColor(COLORS.brand.info)
-    .setDescription(truncate(translatedText, 4000))
-    .setFooter({ text: footer });
+    .setDescription(description)
+    .setFooter({ text: FOOTER });
 }
 
 function truncate(value, max) {
