@@ -110,7 +110,7 @@ const PAGES = {
                'Returns the village owner, alliance, population, and tribe (when map data is loaded).' },
       { name: '📌 Nearby Map',
         value: '**Panel:** click 📌 Nearby Map · **Slash:** `/nearby coords:<x|y> [radius] [limit]`\n' +
-               'Shows villages within `radius` fields (1–50, default 10), up to `limit` results (1–50, default 10).' },
+               'Shows villages within `radius` fields (1–50, default 10), up to `limit` results (1–40, default 10).' },
       { name: '🗓️ Map freshness',
         value: 'Map data refreshes daily at 06:00. Some villages may be up to 24h stale.' },
     ],

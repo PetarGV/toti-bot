@@ -5,7 +5,7 @@ const DEFAULT_LIMIT = 10;
 const MIN_RADIUS = 1;
 const MAX_RADIUS = 50;
 const MIN_LIMIT = 1;
-const MAX_LIMIT = 50;
+const MAX_LIMIT = 40;
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);

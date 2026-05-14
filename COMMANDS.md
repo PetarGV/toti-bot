@@ -134,7 +134,7 @@ Personal dashboard, active-call browser, leaderboards.
 | ⚙️ My Profile | Same as `/profile` |
 | 🗺️ Nearby Map | Open a modal to search villages near coordinates |
 
-**Nearby Map:** defaults to 10 fields and 10 results. Radius is clamped to 1-50 fields, and limit is clamped to 1-50 results.
+**Nearby Map:** defaults to 10 fields and 10 results. Radius is clamped to 1-50 fields, and limit is clamped to 1-40 results.
 
 ### Pagination
 | Button | Action |

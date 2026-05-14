@@ -62,9 +62,12 @@ test('buildNearbyEmbed renders nearby rows as a code-block table with population
 
   assert.match(json.description, /^```text\n/);
   assert.match(json.description, /Tag/);
+  assert.match(json.description, /VPop/);
   assert.match(json.description, /PPop/);
+  assert.match(json.description, /Tribe/);
   assert.match(json.description, /FARM/);
   assert.match(json.description, /THREAT/);
-  assert.match(json.description, /Small Farm/);
-  assert.match(json.description, /Large Threat/);
+  // Village name column dropped to keep the table from wrapping on a
+  // typical Discord viewport.
+  assert.doesNotMatch(json.description, /Small Farm|Large Threat/);
 });

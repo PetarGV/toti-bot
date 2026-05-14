@@ -27,7 +27,6 @@ const TABLE_COLUMNS = [
   { key: 'villagePopulation', label: 'VPop', width: 6, align: 'right' },
   { key: 'playerPopulation', label: 'PPop', width: 7, align: 'right' },
   { key: 'tribe', label: 'Tribe', width: 8 },
-  { key: 'village', label: 'Village', width: 18 },
 ];
 
 export async function handleNearbyCommand(interaction) {
@@ -60,7 +59,7 @@ export async function handleNearbyButton(interaction) {
   const limitInput = new TextInputBuilder()
     .setCustomId('limit')
     .setLabel('Result limit')
-    .setPlaceholder('Default: 10, max: 50')
+    .setPlaceholder('Default: 10, max: 40')
     .setStyle(TextInputStyle.Short)
     .setRequired(false)
     .setMaxLength(2);

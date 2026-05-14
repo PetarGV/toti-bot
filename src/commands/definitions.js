@@ -190,9 +190,9 @@ export const commandDefinitions = [
     )
     .addIntegerOption(o =>
       o.setName('limit')
-        .setDescription('Max nearby villages, 1-50')
+        .setDescription('Max nearby villages, 1-40')
         .setMinValue(1)
-        .setMaxValue(50)
+        .setMaxValue(40)
         .setRequired(false)
     ),
 
