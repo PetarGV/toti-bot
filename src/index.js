@@ -3,7 +3,7 @@
 process.env.TZ = 'UTC';
 
 import 'dotenv/config';
-import { Client, GatewayIntentBits, InteractionType, Events } from 'discord.js';
+import { Client, GatewayIntentBits, InteractionType, Events, Partials } from 'discord.js';
 import { initDb, prepare, flushDb, getConfig } from './db/client.js';
 import { restorePanels } from './panel/deploy.js';
 import { startMapFetchJob, fetchMapWithRetry } from './jobs/mapFetch.js';
@@ -15,6 +15,7 @@ import { unixNow } from './utils/time.js';
 import { startHealthServer, stopHealthServer } from './server/health.js';
 import { routeCommand, routeButton, routeModal, routeSelect } from './handlers/router.js';
 import { handleGuildMemberAdd, handleGuildMemberRemove } from './handlers/onboarding.js';
+import { handleTranslateReaction } from './handlers/translateReaction.js';
 import { refreshOpenCalls } from './handlers/calls.js';
 import { logger, flushLogs } from './utils/logger.js';
 import { recordError } from './utils/metrics.js';
@@ -25,11 +26,25 @@ import './handlers/combat.js';
 import './handlers/scoutCall.js';
 
 const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers],
+  intents: [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.GuildMessageReactions,
+    GatewayIntentBits.MessageContent,
+  ],
+  partials: [
+    Partials.Message,
+    Partials.Channel,
+    Partials.Reaction,
+  ],
 });
 
 client.once('clientReady', async () => {
   logger.info(`Logged in as ${client.user.tag}`);
+  if (!process.env.DEEPL_API_KEY) {
+    logger.warn('DEEPL_API_KEY not set - /translate and flag-reaction translation will be disabled');
+  }
   await restorePanels(client);
   await refreshOpenCalls(client);
   const openCount = prepare("SELECT COUNT(*) as c FROM calls WHERE status = 'open'").get();
@@ -103,6 +118,15 @@ client.on(Events.GuildMemberRemove, async (member) => {
     await handleGuildMemberRemove(member);
   } catch (err) {
     logger.error('guildMemberRemove handler crashed:', err);
+    recordError(err);
+  }
+});
+
+client.on(Events.MessageReactionAdd, async (reaction, user) => {
+  try {
+    await handleTranslateReaction(reaction, user);
+  } catch (err) {
+    logger.error('messageReactionAdd handler crashed:', err);
     recordError(err);
   }
 });

@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
+import { langChoices } from '../utils/translation/locales.js';
 
 export const commandDefinitions = [
   // ── Admin ───────────────────────────────────────────────────────────────
@@ -210,6 +211,21 @@ export const commandDefinitions = [
   new SlashCommandBuilder()
     .setName('help')
     .setDescription('How to use the bot — interactive guide'),
+
+  new SlashCommandBuilder()
+    .setName('translate')
+    .setDescription('Translate text with DeepL')
+    .addStringOption(o =>
+      o.setName('text')
+        .setDescription('Text to translate')
+        .setRequired(true)
+    )
+    .addStringOption(o =>
+      o.setName('to')
+        .setDescription('Target language')
+        .setRequired(false)
+        .addChoices(...langChoices())
+    ),
 
   new SlashCommandBuilder()
     .setName('timer')
