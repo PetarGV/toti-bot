@@ -1,4 +1,6 @@
-import { EmbedBuilder } from 'discord.js';
+import {
+  EmbedBuilder, ActionRowBuilder, ModalBuilder, TextInputBuilder, TextInputStyle,
+} from 'discord.js';
 import { prepare } from '../db/client.js';
 import { parseDuration, formatDuration } from '../utils/duration.js';
 import { unixNow, discordTimestamp } from '../utils/time.js';
@@ -102,4 +104,88 @@ export function buildStatusEmbed(t) {
       { name: 'Channel',   value: `<#${t.channel_id}>`,                inline: true },
     )
     .setFooter({ text: FOOTER });
+}
+
+const PRESETS = {
+  '7m':  7 * 60,
+  '10m': 10 * 60,
+  '13m': 13 * 60,
+};
+
+function startedReply(intervalSec, replaced) {
+  const verb = replaced ? 'replaced' : 'started';
+  const next = unixNow() + intervalSec;
+  return {
+    content:
+      `▶️ Timer ${verb} — every **${formatDuration(intervalSec)}**, next ping ${discordTimestamp(next, 'R')}.` +
+      (replaced ? ' Fires reset.' : ''),
+    ephemeral: true,
+  };
+}
+
+export async function handleTimerPanelPreset(interaction) {
+  const key = interaction.customId.split(':')[2];
+  const intervalSec = PRESETS[key];
+  if (!intervalSec) {
+    return interaction.reply({ content: 'Unknown preset.', ephemeral: true });
+  }
+
+  const existing = prepare('SELECT user_id FROM timers WHERE user_id = ?').get(interaction.user.id);
+  startOrReplaceTimer({
+    userId:      interaction.user.id,
+    channelId:   interaction.channel.id,
+    intervalSec,
+    label:       null,
+  });
+  await interaction.reply(startedReply(intervalSec, !!existing));
+}
+
+export async function handleTimerPanelCustom(interaction) {
+  const modal = new ModalBuilder()
+    .setCustomId('timer:custom_submit')
+    .setTitle('Custom Timer');
+
+  const interval = new TextInputBuilder()
+    .setCustomId('interval')
+    .setLabel('Interval (e.g. 7m, 1h30m, 90s)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('10m')
+    .setMaxLength(20);
+
+  const label = new TextInputBuilder()
+    .setCustomId('label')
+    .setLabel('Label (optional)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(40);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(interval),
+    new ActionRowBuilder().addComponents(label),
+  );
+
+  await interaction.showModal(modal);
+}
+
+export async function handleTimerPanelCustomModal(interaction) {
+  const intervalRaw = interaction.fields.getTextInputValue('interval');
+  const labelRaw    = interaction.fields.getTextInputValue('label');
+  const intervalSec = parseDuration(intervalRaw);
+
+  if (!intervalSec) {
+    return interaction.reply({
+      content: '❌ Invalid interval. Examples: `7m`, `90s`, `1h30m`. Min 60s, max 24h.',
+      ephemeral: true,
+    });
+  }
+
+  const existing = prepare('SELECT user_id FROM timers WHERE user_id = ?').get(interaction.user.id);
+  startOrReplaceTimer({
+    userId:      interaction.user.id,
+    channelId:   interaction.channel.id,
+    intervalSec,
+    label:       labelRaw?.trim() || null,
+  });
+  await interaction.reply(startedReply(intervalSec, !!existing));
 }

@@ -53,7 +53,12 @@ import {
   handleTribeSelect,
 } from './profile.js';
 import { handleLeaderboardCommand } from './leaderboard.js';
-import { handleTimerCommand } from './timer.js';
+import {
+  handleTimerCommand,
+  handleTimerPanelPreset,
+  handleTimerPanelCustom,
+  handleTimerPanelCustomModal,
+} from './timer.js';
 import { handleHelpCommand, handleHelpSelect } from './help.js';
 import { handleTranslate } from './translate.js';
 import { handleRoleButton, handleRoleSelect } from './roles.js';
@@ -178,6 +183,11 @@ export async function routeButton(interaction) {
       if (action === 'close')  return await handleScoutCloseButton(interaction);
     }
 
+    if (ns === 'timer') {
+      if (action === 'preset') return await handleTimerPanelPreset(interaction);
+      if (action === 'custom') return await handleTimerPanelCustom(interaction);
+    }
+
     // Remaining unimplemented
     if (id === 'intel:report') return await notImplemented(interaction);
 
@@ -227,6 +237,7 @@ export async function routeModal(interaction) {
     if (id === 'onboard:save-ign')    return await handleOnboardSaveIgnModal(interaction);
     if (id === 'onboard:save-coords') return await handleOnboardSaveCoordsModal(interaction);
     if (id.startsWith('sync:ambig-ign-modal:')) return await handleAmbigIgnModal(interaction);
+    if (id === 'timer:custom_submit')           return await handleTimerPanelCustomModal(interaction);
     return await notImplemented(interaction);
   } catch (err) {
     logger.error('Modal error [%s]:', id, err);
