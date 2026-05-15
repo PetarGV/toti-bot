@@ -113,6 +113,11 @@ export function applyMemberMapProfileMatches(audit) {
   return { updated, alreadyLinked, conflicts };
 }
 
+export function reportableUnmatchedRows(audit) {
+  return (audit.unmatched ?? [])
+    .filter(row => getAllLinksForUser(row.member.id).length === 0);
+}
+
 export async function handleSetup(interaction) {
   const type = interaction.options.getSubcommand();
   await deployPanel(interaction, type);
@@ -218,6 +223,7 @@ export async function handleAdmin(interaction) {
       .filter(member => !member.user?.bot && !excluded.has(member.id));
     const audit = buildMemberMapAudit(members, players);
     const unresolvedAmbiguous = audit.ambiguous.filter(row => !getPrimaryLinkForUser(row.member.id));
+    const visibleUnmatched = reportableUnmatchedRows(audit);
     const updateProfiles = interaction.options.getBoolean('update-profiles') ?? true;
     const profileSync = updateProfiles
       ? applyMemberMapProfileMatches(audit)
@@ -251,7 +257,7 @@ export async function handleAdmin(interaction) {
         { name: 'Already Linked',     value: String(profileSync.alreadyLinked.length), inline: true },
         { name: 'Profile Conflicts',  value: String(profileSync.conflicts.length), inline: true },
         { name: 'Ambiguous',          value: String(unresolvedAmbiguous.length), inline: true },
-        { name: 'Unmatched',          value: String(audit.unmatched.length), inline: true },
+        { name: 'Unmatched',          value: String(visibleUnmatched.length), inline: true },
         { name: '⚠️ Flagged (TBD)',   value: String(flaggedTbd.length), inline: true },
         { name: '⚠️ Missing IGN',     value: String(flaggedMissingIgn.length), inline: true },
         { name: '🚨 Unlinked TBDs',   value: String(unlinkedTbds.length), inline: true },
@@ -289,10 +295,10 @@ export async function handleAdmin(interaction) {
       });
     }
 
-    if (audit.unmatched.length) {
+    if (visibleUnmatched.length) {
       embed.addFields({
         name: 'Unmatched Members',
-        value: firstLines(audit.unmatched.map(row => `<@${row.member.id}> (${row.displayName})`)),
+        value: firstLines(visibleUnmatched.map(row => `<@${row.member.id}> (${row.displayName})`)),
         inline: false,
       });
     }
@@ -326,7 +332,7 @@ export async function handleAdmin(interaction) {
       `Member sync by ${interaction.user.tag}: ${audit.matched.length} matched, ` +
       `${profileSync.updated.length} updated, ${unresolvedAmbiguous.length} ambiguous, ` +
       `${flaggedTbd.length} flagged TBD, ${flaggedMissingIgn.length} flagged missing IGN, ` +
-      `${unlinkedTbds.length} unlinked TBDs, ${audit.unmatched.length} unmatched`,
+      `${unlinkedTbds.length} unlinked TBDs, ${visibleUnmatched.length} unmatched`,
     );
 
     const resolveRow = buildSyncResolveButtons({

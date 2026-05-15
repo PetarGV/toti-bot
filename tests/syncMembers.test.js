@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupTestDb, resetTables } from './helpers/testDb.js';
 import { prepare } from '../src/db/client.js';
-import { applyMemberMapProfileMatches } from '../src/commands/admin.js';
+import { applyMemberMapProfileMatches, reportableUnmatchedRows } from '../src/commands/admin.js';
 import { setUserIgnFromInput, adminLink, getPrimaryLinkForUser, getAllLinksForUser } from '../src/handlers/userIgnLinks.js';
 import { upsertAccountFromMap } from '../src/handlers/travianAccounts.js';
 import { buildSyncResolveButtons } from '../src/handlers/syncResolve.js';
@@ -62,6 +62,27 @@ test('applyMemberMapProfileMatches skips users with any existing link', async ()
   assert.equal(result.updated.length, 0);
   assert.equal(result.conflicts.length, 1);     // 111 — different primary
   assert.equal(result.alreadyLinked.length, 1); // 222 — already linked to same ign
+});
+
+test('reportableUnmatchedRows excludes members with any existing manual link', async () => {
+  await setupTestDb();
+  resetTables();
+  seedMap([
+    { id: 1, x: 0, y: 0, player: 'Alpha', uid: 10 },
+  ]);
+  prepare('INSERT INTO users (discord_id) VALUES (?)').run('111');
+  prepare('INSERT INTO users (discord_id) VALUES (?)').run('222');
+  adminLink('111', 'Alpha');
+
+  const audit = {
+    unmatched: [
+      { member: { id: '111' }, displayName: 'Linked Nick' },
+      { member: { id: '222' }, displayName: 'Needs Review' },
+    ],
+  };
+
+  const rows = reportableUnmatchedRows(audit);
+  assert.deepEqual(rows.map(row => row.member.id), ['222']);
 });
 
 test('buildSyncResolveButtons returns a row only when there is anything to resolve', () => {

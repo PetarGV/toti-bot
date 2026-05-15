@@ -5,7 +5,7 @@ import { logger } from '../utils/logger.js';
 import { COLORS, FOOTER } from '../utils/i18n.js';
 import { getTravianPlayersFromMap, buildMemberMapAudit } from '../utils/memberMapMonitor.js';
 import { getPrimaryLinkForUser } from '../handlers/userIgnLinks.js';
-import { applyMemberMapProfileMatches } from '../commands/admin.js';
+import { applyMemberMapProfileMatches, reportableUnmatchedRows } from '../commands/admin.js';
 import { assignRolesFromIgn, findUnlinkedTbds } from '../handlers/memberRoles.js';
 import { renameOnboardingChannel, flagOnboardingChannel } from '../handlers/onboarding.js';
 import { getPrimaryGuild, getNotificationsChannel } from '../utils/guild.js';
@@ -171,6 +171,7 @@ export async function runMemberSync(client) {
   const audit = buildMemberMapAudit(members, players);
   const profileSync = applyMemberMapProfileMatches(audit);
   const unresolvedAmbiguous = audit.ambiguous.filter(row => !getPrimaryLinkForUser(row.member.id));
+  const visibleUnmatched = reportableUnmatchedRows(audit);
 
   const { rolesAssigned, flaggedTbd, flaggedMissingIgn } = await applyMemberSyncRoles({
     guild, memberCollection, members, profileSync, excluded,
@@ -183,7 +184,7 @@ export async function runMemberSync(client) {
   logger.info(
     `memberSync: ${audit.matched.length} matched, ${profileSync.updated.length} new links, ` +
     `${rolesAssigned} roles assigned, ${flaggedCount} flagged (${flaggedTbd.length} TBD, ${flaggedMissingIgn.length} missing IGN), ` +
-    `${unresolvedAmbiguous.length} ambiguous, ${unlinkedTbds.length} unlinked TBDs, ${audit.unmatched.length} unmatched`,
+    `${unresolvedAmbiguous.length} ambiguous, ${unlinkedTbds.length} unlinked TBDs, ${visibleUnmatched.length} unmatched`,
   );
 
   const hasChanges =
