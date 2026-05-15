@@ -12,7 +12,8 @@ export const commandDefinitions = [
     .addSubcommand(s => s.setName('scout').setDescription('Scouting & intel panel'))
     .addSubcommand(s => s.setName('resources').setDescription('Resource push panel'))
     .addSubcommand(s => s.setName('general').setDescription('Status & overview panel'))
-    .addSubcommand(s => s.setName('roles').setDescription('Crew role selection panel')),
+    .addSubcommand(s => s.setName('roles').setDescription('Crew role selection panel'))
+    .addSubcommand(s => s.setName('timer').setDescription('Personal timer control panel')),
 
   new SlashCommandBuilder()
     .setName('admin')

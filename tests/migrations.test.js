@@ -46,3 +46,32 @@ test('migration moves a legacy users.ign row into the new tables', async () => {
   const user = prepare('SELECT * FROM users WHERE discord_id = ?').get('222');
   assert.ok(user, 'user row still exists after re-migration');
 });
+
+test('migration adds paused and remaining_sec columns to timers', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const cols = prepare(`PRAGMA table_info(timers)`).all();
+  const byName = Object.fromEntries(cols.map(c => [c.name, c]));
+
+  assert.ok(byName.paused,        'paused column exists');
+  assert.equal(byName.paused.type, 'INTEGER');
+  assert.equal(byName.paused.dflt_value, '0');
+
+  assert.ok(byName.remaining_sec, 'remaining_sec column exists');
+  assert.equal(byName.remaining_sec.type, 'INTEGER');
+});
+
+test('existing running timer rows survive migration unchanged', async () => {
+  await setupTestDb();
+  resetTables();
+
+  prepare(`
+    INSERT INTO timers (user_id, channel_id, interval_sec, next_fire_at, fires_count, label)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run('user-1', 'chan-1', 600, 9_999_999_999, 0, 'raid');
+
+  const row = prepare('SELECT * FROM timers WHERE user_id = ?').get('user-1');
+  assert.equal(row.paused, 0);
+  assert.equal(row.remaining_sec, null);
+});

@@ -65,7 +65,7 @@ test('applyConflictAction rejects an already-resolved row', async () => {
   assert.equal(r.reason, 'already_resolved');
 });
 
-test('computeConflicts walks the current map+audit and returns conflict rows', async () => {
+test('computeConflicts skips users that already have any link', async () => {
   await setupTestDb();
   resetTables();
   seedMap([
@@ -85,10 +85,7 @@ test('computeConflicts walks the current map+audit and returns conflict rows', a
     unmatched: [],
   };
   const rows = computeConflicts(audit);
-  assert.equal(rows.length, 1);
-  assert.equal(rows[0].discordId, '111');
-  assert.equal(rows[0].existingIgn, 'Alpha');
-  assert.equal(rows[0].targetIgn, 'Beta');
+  assert.deepEqual(rows, []);
 });
 
 test('computeAmbiguous returns audit.ambiguous mapped to picker rows', async () => {

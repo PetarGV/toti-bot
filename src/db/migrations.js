@@ -67,6 +67,22 @@ export function runMigrations() {
     logger.warn('Migration timers table skipped:', err.message);
   }
 
+  if (!hasColumn('timers', 'paused')) {
+    try {
+      exec('ALTER TABLE timers ADD COLUMN paused INTEGER DEFAULT 0');
+    } catch (err) {
+      logger.warn('Migration timers.paused skipped:', err.message);
+    }
+  }
+
+  if (!hasColumn('timers', 'remaining_sec')) {
+    try {
+      exec('ALTER TABLE timers ADD COLUMN remaining_sec INTEGER');
+    } catch (err) {
+      logger.warn('Migration timers.remaining_sec skipped:', err.message);
+    }
+  }
+
   try {
     exec(`
       CREATE TABLE IF NOT EXISTS pending_message_deletes (

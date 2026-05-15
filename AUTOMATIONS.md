@@ -52,7 +52,7 @@ Every 5 minutes, finds open calls whose `deadline` has passed and marks them `ex
 
 Two responsibilities, both running every 10 seconds:
 
-1. **Fire due timers** — for each row in `timers` with `next_fire_at <= now`, send a reminder ping in the configured channel, advance `next_fire_at`, increment `fires_count`.
+1. **Fire due timers** — for each row in `timers` with `next_fire_at <= now AND paused = 0`, send a reminder ping in the configured channel, advance `next_fire_at`, increment `fires_count`. Paused timers are skipped entirely; their `remaining_sec` is preserved until Resume.
 2. **Drain pending deletes** — fire-and-forget delete every message in `pending_message_deletes` whose `delete_at <= now`. Used to auto-clean timer pings after 30 s without leaving them orphaned across bot restarts.
 
 If a timer's channel is gone or unreachable, `next_fire_at` is still advanced so the loop doesn't hammer a broken channel.

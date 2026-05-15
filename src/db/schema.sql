@@ -75,13 +75,15 @@ CREATE TABLE IF NOT EXISTS x_world (
 );
 
 CREATE TABLE IF NOT EXISTS timers (
-  user_id      TEXT PRIMARY KEY,
-  channel_id   TEXT NOT NULL,
-  interval_sec INTEGER NOT NULL,
-  next_fire_at INTEGER NOT NULL,
-  fires_count  INTEGER DEFAULT 0,
-  label        TEXT,
-  created_at   INTEGER DEFAULT (unixepoch())
+  user_id       TEXT PRIMARY KEY,
+  channel_id    TEXT NOT NULL,
+  interval_sec  INTEGER NOT NULL,
+  next_fire_at  INTEGER NOT NULL,
+  fires_count   INTEGER DEFAULT 0,
+  label         TEXT,
+  paused        INTEGER DEFAULT 0,
+  remaining_sec INTEGER,
+  created_at    INTEGER DEFAULT (unixepoch())
 );
 
 CREATE INDEX IF NOT EXISTS idx_xworld_coords ON x_world(x, y);
