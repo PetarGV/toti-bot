@@ -59,6 +59,8 @@ import {
   handleTimerPanelCustom,
   handleTimerPanelCustomModal,
   handleTimerPanelPause,
+  handleTimerPanelStop,
+  handleTimerPanelStatus,
 } from './timer.js';
 import { handleHelpCommand, handleHelpSelect } from './help.js';
 import { handleTranslate } from './translate.js';
@@ -188,6 +190,8 @@ export async function routeButton(interaction) {
       if (action === 'preset') return await handleTimerPanelPreset(interaction);
       if (action === 'custom') return await handleTimerPanelCustom(interaction);
       if (action === 'pause')  return await handleTimerPanelPause(interaction);
+      if (action === 'stop')   return await handleTimerPanelStop(interaction);
+      if (action === 'status') return await handleTimerPanelStatus(interaction);
     }
 
     // Remaining unimplemented

@@ -167,3 +167,70 @@ test('Pause on a paused timer with 0 remaining resumes and fires immediately', a
   assert.equal(row.paused, 0);
   assert.ok(row.next_fire_at <= before + 1);
 });
+
+import {
+  handleTimerPanelStop,
+  handleTimerPanelStatus,
+} from '../../src/handlers/timer.js';
+
+test('Stop with no timer replies "no active timer"', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const ix = makeButtonInteraction({ customId: 'timer:stop' });
+  await handleTimerPanelStop(ix);
+
+  const [_, payload] = ix._calls[0];
+  assert.match(payload.content, /no active timer/i);
+});
+
+test('Stop deletes the row and reports fires_count', async () => {
+  await setupTestDb();
+  resetTables();
+
+  prepare(`
+    INSERT INTO timers (user_id, channel_id, interval_sec, next_fire_at, fires_count, label, paused, remaining_sec)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run('u1', 'c1', 600, 9_999_999_999, 7, null, 0, null);
+
+  const ix = makeButtonInteraction({ customId: 'timer:stop' });
+  await handleTimerPanelStop(ix);
+
+  const row = prepare('SELECT * FROM timers WHERE user_id = ?').get('u1');
+  assert.equal(row, undefined);
+
+  const [_, payload] = ix._calls[0];
+  assert.match(payload.content, /stopped/i);
+  assert.match(payload.content, /7/);
+});
+
+test('Status with no timer replies "no active timer"', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const ix = makeButtonInteraction({ customId: 'timer:status' });
+  await handleTimerPanelStatus(ix);
+
+  const [_, payload] = ix._calls[0];
+  assert.match(payload.content, /no active timer/i);
+});
+
+test('Status renders the State-field embed for the calling user', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const now = unixNow();
+  prepare(`
+    INSERT INTO timers (user_id, channel_id, interval_sec, next_fire_at, fires_count, label, paused, remaining_sec)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run('u1', 'c1', 600, now + 250, 3, 'raid', 0, null);
+
+  const ix = makeButtonInteraction({ customId: 'timer:status' });
+  await handleTimerPanelStatus(ix);
+
+  const [_, payload] = ix._calls[0];
+  const embed = payload.embeds[0].toJSON();
+  assert.equal(embed.title, '⏱️ Your Timer');
+  assert.ok(embed.fields.some(f => f.name === 'State'));
+  assert.equal(payload.ephemeral, true);
+});

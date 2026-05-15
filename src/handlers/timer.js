@@ -223,3 +223,29 @@ export async function handleTimerPanelPause(interaction) {
     ephemeral: true,
   });
 }
+
+export async function handleTimerPanelStop(interaction) {
+  const t = prepare('SELECT * FROM timers WHERE user_id = ?').get(interaction.user.id);
+  if (!t) {
+    return interaction.reply({
+      content: 'You have no active timer.',
+      ephemeral: true,
+    });
+  }
+  prepare('DELETE FROM timers WHERE user_id = ?').run(interaction.user.id);
+  await interaction.reply({
+    content: `⏹️ Timer stopped. Fired ${t.fires_count} time(s).`,
+    ephemeral: true,
+  });
+}
+
+export async function handleTimerPanelStatus(interaction) {
+  const t = prepare('SELECT * FROM timers WHERE user_id = ?').get(interaction.user.id);
+  if (!t) {
+    return interaction.reply({
+      content: 'You have no active timer. Pick a preset (7m / 10m / 13m) or Custom… to start one.',
+      ephemeral: true,
+    });
+  }
+  await interaction.reply({ embeds: [buildStatusEmbed(t)], ephemeral: true });
+}
