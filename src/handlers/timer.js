@@ -78,17 +78,28 @@ async function handleStatus(interaction) {
     return interaction.reply({ content: 'You have no active timer. Start one with `/timer set`.', ephemeral: true });
   }
 
-  const embed = new EmbedBuilder()
-    .setColor(COLORS.brand.info)
+  await interaction.reply({ embeds: [buildStatusEmbed(t)], ephemeral: true });
+}
+
+export function buildStatusEmbed(t) {
+  const stateValue = t.paused
+    ? `⏸️ Paused · ${formatDuration(Math.max(0, t.remaining_sec ?? 0))} left`
+    : `▶️ Running`;
+
+  const nextPing = t.paused
+    ? '*paused — tap Pause to resume*'
+    : discordTimestamp(t.next_fire_at, 'R');
+
+  return new EmbedBuilder()
+    .setColor(t.paused ? COLORS.brand.warning : COLORS.brand.info)
     .setTitle('⏱️ Your Timer')
     .addFields(
-      { name: 'Interval',  value: formatDuration(t.interval_sec),  inline: true },
-      { name: 'Label',     value: t.label || '*none*',             inline: true },
-      { name: 'Fires',     value: String(t.fires_count),           inline: true },
-      { name: 'Next Ping', value: discordTimestamp(t.next_fire_at, 'R'), inline: false },
-      { name: 'Channel',   value: `<#${t.channel_id}>`,            inline: true },
+      { name: 'State',     value: stateValue,                          inline: true },
+      { name: 'Interval',  value: formatDuration(t.interval_sec),      inline: true },
+      { name: 'Label',     value: t.label || '*none*',                 inline: true },
+      { name: 'Fires',     value: String(t.fires_count),               inline: true },
+      { name: 'Next Ping', value: nextPing,                            inline: false },
+      { name: 'Channel',   value: `<#${t.channel_id}>`,                inline: true },
     )
     .setFooter({ text: FOOTER });
-
-  await interaction.reply({ embeds: [embed], ephemeral: true });
 }
