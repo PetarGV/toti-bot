@@ -17,7 +17,6 @@ import {
 import { adminLink, adminUnlink, adminSetPrimary, getAllLinksForUser, getPrimaryLinkForUser } from '../handlers/userIgnLinks.js';
 import { upsertAccountFromMap } from '../handlers/travianAccounts.js';
 import { buildSyncResolveButtons } from '../handlers/syncResolve.js';
-import { normalizeIgn } from '../utils/ign.js';
 import { applyCoordsAndDeriveTribe, renameOnboardingChannel, updateOnboardingChannelTopic } from '../handlers/onboarding.js';
 import { assignRolesFromIgn, findUnlinkedTbds } from '../handlers/memberRoles.js';
 import { applyMemberSyncRoles } from '../jobs/memberSync.js';
@@ -80,20 +79,13 @@ export function applyMemberMapProfileMatches(audit) {
   for (const row of audit.matched) {
     const discordId = row.member.id;
     const ign = row.player.player;
-    const normalizedIgnInput = row.player.normalizedName ?? normalizeIgn(ign);
 
     const links = getAllLinksForUser(discordId);
 
-    // Already linked to this exact account?
-    if (links.some(l => l.normalized_ign === normalizedIgnInput)) {
-      alreadyLinked.push(row);
-      continue;
-    }
-
-    // Any other link? Then sync doesn't override — flag conflict.
+    // Any existing link is a manual/profile resolution. Do not let display-name
+    // matching create conflicts for users leadership has already linked.
     if (links.length > 0) {
-      const primary = getPrimaryLinkForUser(discordId);
-      conflicts.push({ ...row, existingIgn: primary?.ign ?? links[0].ign });
+      alreadyLinked.push(row);
       continue;
     }
 

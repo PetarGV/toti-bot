@@ -40,7 +40,7 @@ test('applyMemberMapProfileMatches creates a primary sync link for a fresh user'
   assert.equal(primary.source, 'sync');
 });
 
-test('applyMemberMapProfileMatches skips users with any existing link', async () => {
+test('applyMemberMapProfileMatches treats any existing link as already handled', async () => {
   await setupTestDb();
   resetTables();
   seedMap([
@@ -60,8 +60,8 @@ test('applyMemberMapProfileMatches skips users with any existing link', async ()
 
   const result = applyMemberMapProfileMatches(audit);
   assert.equal(result.updated.length, 0);
-  assert.equal(result.conflicts.length, 1);     // 111 — different primary
-  assert.equal(result.alreadyLinked.length, 1); // 222 — already linked to same ign
+  assert.equal(result.conflicts.length, 0);
+  assert.equal(result.alreadyLinked.length, 2);
 });
 
 test('reportableUnmatchedRows excludes members with any existing manual link', async () => {

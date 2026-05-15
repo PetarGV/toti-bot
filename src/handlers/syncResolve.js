@@ -34,21 +34,10 @@ export function buildSyncResolveButtons({ adminId, conflicts, ambiguous }) {
 }
 
 export function computeConflicts(audit) {
-  const out = [];
-  for (const row of audit.matched ?? []) {
-    const discordId = row.member.id;
-    const links = getAllLinksForUser(discordId);
-    if (links.length === 0) continue;
-    if (links.some(l => l.normalized_ign === (row.player.normalizedName ?? normalizeIgn(row.player.player)))) continue;
-    const primary = getPrimaryLinkForUser(discordId);
-    out.push({
-      discordId,
-      existingIgn: primary?.ign ?? links[0].ign,
-      targetIgn: row.player.player,
-      displayName: row.displayName,
-    });
-  }
-  return out;
+  // Linked users are already resolved, and unlinked users have no profile to
+  // conflict with. Profile sync no longer reports display-name guesses as
+  // conflicts once a member has any stored IGN link.
+  return [];
 }
 
 export function applyConflictAction({ action, discordId, targetIgn }) {
@@ -325,4 +314,3 @@ export async function handleActButton(interaction) {
     components: [],
   });
 }
-
