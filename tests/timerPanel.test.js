@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ButtonStyle } from 'discord.js';
 import { buildPanel, PANEL_TYPES } from '../src/panel/types.js';
+import { commandDefinitions } from '../src/commands/definitions.js';
 
 test('timer is a valid panel type', () => {
   assert.ok(PANEL_TYPES.includes('timer'));
@@ -32,4 +33,10 @@ test('buildPanel("timer") renders correct title and button layout', () => {
   // Pause is warning-ish, Stop is danger, others secondary
   const stopBtn = rows.flat().find(c => c.custom_id === 'timer:stop');
   assert.equal(stopBtn.style, ButtonStyle.Danger);
+});
+
+test('/setup exposes a timer subcommand', () => {
+  const setup = commandDefinitions.find(c => c.name === 'setup');
+  assert.ok(setup);
+  assert.ok(setup.options.some(o => o.name === 'timer'));
 });
