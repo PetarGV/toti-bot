@@ -6,9 +6,13 @@ import { logger } from '../utils/logger.js';
 
 const AUTO_DELETE_SEC = 30;
 
+export function selectDueTimers(now) {
+  return prepare('SELECT * FROM timers WHERE next_fire_at <= ? AND paused = 0').all(now);
+}
+
 async function fireDueTimers(client) {
   const now = unixNow();
-  const due = prepare('SELECT * FROM timers WHERE next_fire_at <= ?').all(now);
+  const due = selectDueTimers(now);
 
   for (const t of due) {
     try {
