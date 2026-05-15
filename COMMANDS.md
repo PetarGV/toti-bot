@@ -155,7 +155,7 @@ Recurring channel-mention reminder. Auto-deletes each tick after 30 seconds.
 | `/timer stop` | — | Stop your timer |
 | `/timer status` | — | Show your timer status, fire count, next ping |
 
-**Behavior:** the bot mentions you every `interval` in the channel where you ran `/timer set`. Each tick auto-deletes after 30s — you keep the ping notification, the channel stays clean.
+**Behavior:** the bot mentions you every `interval` in the channel where you ran `/timer set`. Each tick auto-deletes after 30s — you keep the ping notification, the channel stays clean. The same operations are reachable via the pinned panel deployed with `/setup timer` — buttons for 7m / 10m / 13m / Custom…, plus Pause (toggle), Stop, and Status. Pause preserves the remaining time and Resume picks up from there.
 
 **Limits:** min 60s, max 24h, one timer per user.
 
@@ -174,6 +174,7 @@ All admin commands require Administrator permission.
 | `/setup resources` | — | Post + pin the **Resources** panel (push buttons) |
 | `/setup general` | — | Post + pin the **General** panel (Status, Calls, Profile, Nearby Map) |
 | `/setup roles` | — | Post + pin the **Crew Role** selection panel |
+| `/setup timer` | — | Post + pin the **Timer** control panel (7/10/13m presets, Custom…, Pause, Stop, Status) |
 
 ### Configuration
 | Command | Args | Description |
