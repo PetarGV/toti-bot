@@ -228,7 +228,7 @@ export async function handleTimerPanelStop(interaction) {
   const t = prepare('SELECT * FROM timers WHERE user_id = ?').get(interaction.user.id);
   if (!t) {
     return interaction.reply({
-      content: 'You have no active timer.',
+      content: 'You have no active timer. Pick a preset (7m / 10m / 13m) or Custom… to start one.',
       ephemeral: true,
     });
   }
