@@ -112,12 +112,11 @@ const PRESETS = {
   '13m': 13 * 60,
 };
 
-function startedReply(intervalSec, replaced) {
+function startedReply(intervalSec, nextFireAt, replaced) {
   const verb = replaced ? 'replaced' : 'started';
-  const next = unixNow() + intervalSec;
   return {
     content:
-      `▶️ Timer ${verb} — every **${formatDuration(intervalSec)}**, next ping ${discordTimestamp(next, 'R')}.` +
+      `▶️ Timer ${verb} — every **${formatDuration(intervalSec)}**, next ping ${discordTimestamp(nextFireAt, 'R')}.` +
       (replaced ? ' Fires reset.' : ''),
     ephemeral: true,
   };
@@ -131,13 +130,13 @@ export async function handleTimerPanelPreset(interaction) {
   }
 
   const existing = prepare('SELECT user_id FROM timers WHERE user_id = ?').get(interaction.user.id);
-  startOrReplaceTimer({
+  const { nextFireAt } = startOrReplaceTimer({
     userId:      interaction.user.id,
     channelId:   interaction.channel.id,
     intervalSec,
     label:       null,
   });
-  await interaction.reply(startedReply(intervalSec, !!existing));
+  await interaction.reply(startedReply(intervalSec, nextFireAt, !!existing));
 }
 
 export async function handleTimerPanelCustom(interaction) {
@@ -181,11 +180,11 @@ export async function handleTimerPanelCustomModal(interaction) {
   }
 
   const existing = prepare('SELECT user_id FROM timers WHERE user_id = ?').get(interaction.user.id);
-  startOrReplaceTimer({
+  const { nextFireAt } = startOrReplaceTimer({
     userId:      interaction.user.id,
     channelId:   interaction.channel.id,
     intervalSec,
     label:       labelRaw?.trim() || null,
   });
-  await interaction.reply(startedReply(intervalSec, !!existing));
+  await interaction.reply(startedReply(intervalSec, nextFireAt, !!existing));
 }
