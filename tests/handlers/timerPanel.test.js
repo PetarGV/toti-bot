@@ -6,6 +6,7 @@ import {
   handleTimerPanelPreset,
   handleTimerPanelCustomModal,
 } from '../../src/handlers/timer.js';
+import { handleTimerPanelPause } from '../../src/handlers/timer.js';
 import { unixNow } from '../../src/utils/time.js';
 
 function makeButtonInteraction({ userId = 'u1', channelId = 'c1', customId }) {
@@ -92,4 +93,77 @@ test('custom modal with invalid interval replies with error and no DB write', as
   const [_, payload] = ix._calls[0];
   assert.match(payload.content, /invalid interval/i);
   assert.equal(payload.ephemeral, true);
+});
+
+test('Pause with no timer replies "no active timer"', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const ix = makeButtonInteraction({ customId: 'timer:pause' });
+  await handleTimerPanelPause(ix);
+
+  const [_, payload] = ix._calls[0];
+  assert.match(payload.content, /no active timer/i);
+  assert.equal(payload.ephemeral, true);
+});
+
+test('Pause on a running timer captures remaining_sec', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const now = unixNow();
+  prepare(`
+    INSERT INTO timers (user_id, channel_id, interval_sec, next_fire_at, fires_count, label, paused, remaining_sec)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run('u1', 'c1', 600, now + 250, 4, null, 0, null);
+
+  const ix = makeButtonInteraction({ customId: 'timer:pause' });
+  await handleTimerPanelPause(ix);
+
+  const row = prepare('SELECT * FROM timers WHERE user_id = ?').get('u1');
+  assert.equal(row.paused, 1);
+  assert.ok(row.remaining_sec >= 249 && row.remaining_sec <= 250);
+
+  const [_, payload] = ix._calls[0];
+  assert.match(payload.content, /paused/i);
+});
+
+test('Pause on a paused timer resumes it', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const before = unixNow();
+  prepare(`
+    INSERT INTO timers (user_id, channel_id, interval_sec, next_fire_at, fires_count, label, paused, remaining_sec)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run('u1', 'c1', 600, before - 100, 4, null, 1, 250);
+
+  const ix = makeButtonInteraction({ customId: 'timer:pause' });
+  await handleTimerPanelPause(ix);
+
+  const row = prepare('SELECT * FROM timers WHERE user_id = ?').get('u1');
+  assert.equal(row.paused, 0);
+  assert.equal(row.remaining_sec, null);
+  assert.ok(row.next_fire_at >= before + 250 && row.next_fire_at <= before + 251);
+
+  const [_, payload] = ix._calls[0];
+  assert.match(payload.content, /resumed/i);
+});
+
+test('Pause on a paused timer with 0 remaining resumes and fires immediately', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const before = unixNow();
+  prepare(`
+    INSERT INTO timers (user_id, channel_id, interval_sec, next_fire_at, fires_count, label, paused, remaining_sec)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `).run('u1', 'c1', 600, before - 9999, 4, null, 1, 0);
+
+  const ix = makeButtonInteraction({ customId: 'timer:pause' });
+  await handleTimerPanelPause(ix);
+
+  const row = prepare('SELECT * FROM timers WHERE user_id = ?').get('u1');
+  assert.equal(row.paused, 0);
+  assert.ok(row.next_fire_at <= before + 1);
 });

@@ -188,3 +188,38 @@ export async function handleTimerPanelCustomModal(interaction) {
   });
   await interaction.reply(startedReply(intervalSec, nextFireAt, !!existing));
 }
+
+export async function handleTimerPanelPause(interaction) {
+  const userId = interaction.user.id;
+  const t = prepare('SELECT * FROM timers WHERE user_id = ?').get(userId);
+
+  if (!t) {
+    return interaction.reply({
+      content: 'You have no active timer. Pick a preset (7m / 10m / 13m) or Custom… to start one.',
+      ephemeral: true,
+    });
+  }
+
+  if (t.paused) {
+    // Resume
+    const remaining = Math.max(0, t.remaining_sec ?? 0);
+    const next = unixNow() + remaining;
+    prepare(`
+      UPDATE timers SET paused = 0, remaining_sec = NULL, next_fire_at = ? WHERE user_id = ?
+    `).run(next, userId);
+    return interaction.reply({
+      content: `▶️ Resumed — next ping ${discordTimestamp(next, 'R')}.`,
+      ephemeral: true,
+    });
+  }
+
+  // Pause
+  const remaining = Math.max(0, t.next_fire_at - unixNow());
+  prepare(`
+    UPDATE timers SET paused = 1, remaining_sec = ? WHERE user_id = ?
+  `).run(remaining, userId);
+  return interaction.reply({
+    content: `⏸️ Paused — **${formatDuration(remaining)}** left in this cycle. Tap Pause again to resume.`,
+    ephemeral: true,
+  });
+}
