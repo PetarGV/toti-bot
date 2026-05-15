@@ -3,7 +3,7 @@ import {
 } from 'discord.js';
 import { ROLE_BUTTON_PREFIX, ROLE_RESET_CUSTOM_ID, ROLE_SELECTIONS } from '../utils/roleSelection.js';
 
-export const PANEL_TYPES = ['defense', 'offense', 'resources', 'scout', 'general', 'roles'];
+export const PANEL_TYPES = ['defense', 'offense', 'resources', 'scout', 'general', 'roles', 'timer'];
 
 const COLOR = {
   defense:   0xe74c3c,
@@ -12,6 +12,7 @@ const COLOR = {
   scout:     0x3498db,
   general:   0x9b59b6,
   roles:     0x5865f2,
+  timer:     0xf1c40f,
 };
 
 function btn(customId, label, emoji, style = ButtonStyle.Secondary) {
@@ -67,6 +68,7 @@ const titles = {
   scout:     '🔍 Scouting & Intel',
   general:   '📊 Status & Overview',
   roles:     'Choose Your Crew Role',
+  timer:     '⏱️ Timer Control',
 };
 
 const descriptions = {
@@ -81,10 +83,16 @@ const descriptions = {
     '🟠 Hybrid gives Def Crew too. ⚫ WWK is separate.',
     'Reset removes every crew role.',
   ].join('\n'),
+  timer: [
+    'Personal recurring reminder. Pick a preset to start, or use Custom… for any interval.',
+    'Pause keeps the time left in the current cycle; Resume picks up from there. Stop clears your timer.',
+    '*Your timer is private — clicks reply only to you.*',
+  ].join('\n'),
 };
 
 const footers = {
   roles: 'You can change your selection later from this menu.',
+  timer: 'Your timer is private — each click replies only to you.',
 };
 
 const rowBuilders = {
@@ -145,6 +153,20 @@ const rowBuilders = {
     roleButtonRow(['hybrid', 'wwk']),
     new ActionRowBuilder().addComponents(
       btn(ROLE_RESET_CUSTOM_ID, 'Reset Crew Roles', '♻️', ButtonStyle.Danger),
+    ),
+  ],
+
+  timer: () => [
+    new ActionRowBuilder().addComponents(
+      btn('timer:preset:7m',  '7m',         '⏱️'),
+      btn('timer:preset:10m', '10m',        '⏱️'),
+      btn('timer:preset:13m', '13m',        '⏱️'),
+      btn('timer:custom',     'Custom…',    '⚙️', ButtonStyle.Primary),
+    ),
+    new ActionRowBuilder().addComponents(
+      btn('timer:pause',  'Pause',  '⏸️'),
+      btn('timer:stop',   'Stop',   '⏹️', ButtonStyle.Danger),
+      btn('timer:status', 'Status', '📊'),
     ),
   ],
 };
