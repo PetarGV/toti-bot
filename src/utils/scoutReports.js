@@ -43,6 +43,7 @@ export function parseScoutCommitmentAmount(text) {
 export function isValidScoutImageAttachment(attachment) {
   const contentType = String(attachment?.contentType || '').toLowerCase();
   if (IMAGE_MIME_TYPES.has(contentType)) return true;
+  if (contentType.startsWith('image/')) return false;
   const name = String(attachment?.name || '').toLowerCase();
   const ext = name.includes('.') ? name.split('.').pop() : '';
   return IMAGE_EXTENSIONS.has(ext);

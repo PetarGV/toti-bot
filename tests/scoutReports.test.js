@@ -61,6 +61,7 @@ test('isValidScoutImageAttachment accepts known image attachments', () => {
   assert.equal(isValidScoutImageAttachment({ contentType: 'text/plain', name: 'report.png' }), true);
   assert.equal(isValidScoutImageAttachment({ contentType: 'image/svg+xml', name: 'report.svg' }), false);
   assert.equal(isValidScoutImageAttachment({ contentType: 'image/gif', name: 'report.gif' }), false);
+  assert.equal(isValidScoutImageAttachment({ contentType: 'image/gif', name: 'report.png' }), false);
   assert.equal(isValidScoutImageAttachment({ contentType: 'application/pdf', name: 'report.pdf' }), false);
   assert.equal(isValidScoutImageAttachment({ contentType: null, name: null }), false);
 });
