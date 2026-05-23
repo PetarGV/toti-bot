@@ -14,7 +14,7 @@ function fakeChannel(id, name, type, parentId = null) {
   return { id, name, type, parentId };
 }
 
-function fakeGuild(existing = []) {
+function fakeGuild(existing = [], calls = null) {
   const channels = [...existing];
   const cache = {
     values() {
@@ -26,6 +26,7 @@ function fakeGuild(existing = []) {
     channels: {
       cache,
       async create(payload) {
+        calls?.push(['create', payload.name]);
         const channel = fakeChannel(`created-${channels.length + 1}`, payload.name, payload.type, payload.parent ?? null);
         channels.push(channel);
         return channel;
@@ -107,10 +108,12 @@ test('handleSetup scout creates infrastructure before deploying panel', async ()
   await setupTestDb();
   resetTables();
 
-  const guild = fakeGuild();
   const calls = [];
+  const guild = fakeGuild([], calls);
   const interaction = {
     guild,
+    deferred: false,
+    replied: false,
     channel: {
       id: 'panel-channel',
       name: 'scout-panel',
@@ -124,12 +127,20 @@ test('handleSetup scout creates infrastructure before deploying panel', async ()
       },
     },
     options: { getSubcommand: () => 'scout' },
-    async deferReply(payload) { calls.push(['deferReply', payload]); },
+    async deferReply(payload) {
+      this.deferred = true;
+      calls.push(['deferReply', payload]);
+    },
     async editReply(payload) { calls.push(['editReply', payload]); },
   };
 
   await handleSetup(interaction);
 
+  assert.deepEqual(calls.slice(0, 3).map(([kind, value]) => [kind, value]), [
+    ['deferReply', { ephemeral: true }],
+    ['create', 'Scouting'],
+    ['create', 'scout-reports'],
+  ]);
   assert.equal(getConfig('scouting_category_id'), 'created-1');
   assert.equal(getConfig('scout_reports_channel_id'), 'created-2');
   assert.deepEqual(calls.find(([kind]) => kind === 'send')?.[2], {

@@ -114,13 +114,13 @@ export function reportableUnmatchedRows(audit) {
 export async function handleSetup(interaction) {
   const type = interaction.options.getSubcommand();
   if (type === 'scout') {
+    await interaction.deferReply({ ephemeral: true });
     try {
       await ensureScoutInfrastructure(interaction.guild);
     } catch (err) {
       logger.warn('Scout setup infrastructure failed:', err.message);
-      return interaction.reply({
+      return interaction.editReply({
         content: `❌ Could not prepare scout channels: ${err.message}`,
-        ephemeral: true,
       });
     }
   }
