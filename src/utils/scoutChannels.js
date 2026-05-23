@@ -35,8 +35,7 @@ export async function ensureScoutInfrastructure(guild) {
     });
   }
 
-  let archiveChannel = findChildChannelByName(guild, SCOUT_REPORTS_CHANNEL_NAME, category.id)
-    ?? findChannelByNameAndType(guild, SCOUT_REPORTS_CHANNEL_NAME, ChannelType.GuildText);
+  let archiveChannel = findChildChannelByName(guild, SCOUT_REPORTS_CHANNEL_NAME, category.id);
 
   if (!archiveChannel) {
     archiveChannel = await guild.channels.create({

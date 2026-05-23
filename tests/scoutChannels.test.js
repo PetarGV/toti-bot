@@ -83,3 +83,20 @@ test('ensureScoutInfrastructure reuses existing category and archive channel', a
   assert.equal(result.archiveChannel.id, 'archive-1');
   assert.equal(guild._channels.length, 2);
 });
+
+test('ensureScoutInfrastructure ignores same-named archive channel outside scouting category', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const guild = fakeGuild([
+    fakeChannel('cat-1', 'Scouting', ChannelType.GuildCategory),
+    fakeChannel('archive-old', 'scout-reports', ChannelType.GuildText, 'other-cat'),
+  ]);
+
+  const result = await ensureScoutInfrastructure(guild);
+
+  assert.equal(result.category.id, 'cat-1');
+  assert.equal(result.archiveChannel.parentId, 'cat-1');
+  assert.notEqual(result.archiveChannel.id, 'archive-old');
+  assert.equal(guild._channels.length, 3);
+});
