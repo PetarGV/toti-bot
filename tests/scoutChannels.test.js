@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ChannelType } from 'discord.js';
 import { setupTestDb, resetTables } from './helpers/testDb.js';
+import { getConfig } from '../src/db/client.js';
+import { handleSetup } from '../src/commands/admin.js';
 import {
   findChannelByNameAndType,
   findChildChannelByName,
@@ -99,4 +101,33 @@ test('ensureScoutInfrastructure ignores same-named archive channel outside scout
   assert.equal(result.archiveChannel.parentId, 'cat-1');
   assert.notEqual(result.archiveChannel.id, 'archive-old');
   assert.equal(guild._channels.length, 3);
+});
+
+test('handleSetup scout creates infrastructure before deploying panel', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const guild = fakeGuild();
+  const calls = [];
+  const interaction = {
+    guild,
+    channel: {
+      id: 'panel-channel',
+      name: 'scout-panel',
+      messages: { async fetch() { throw new Error('no old panel'); } },
+      async send(payload) {
+        calls.push(['send', payload]);
+        return { id: 'panel-msg', async pin() {} };
+      },
+    },
+    options: { getSubcommand: () => 'scout' },
+    async deferReply(payload) { calls.push(['deferReply', payload]); },
+    async editReply(payload) { calls.push(['editReply', payload]); },
+  };
+
+  await handleSetup(interaction);
+
+  assert.equal(getConfig('scouting_category_id'), 'created-1');
+  assert.equal(getConfig('scout_reports_channel_id'), 'created-2');
+  assert.equal(calls.at(-1)[1].content, '✅ scout panel deployed and pinned.');
 });
