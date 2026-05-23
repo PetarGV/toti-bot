@@ -116,7 +116,10 @@ test('handleSetup scout creates infrastructure before deploying panel', async ()
       name: 'scout-panel',
       messages: { async fetch() { throw new Error('no old panel'); } },
       async send(payload) {
-        calls.push(['send', payload]);
+        calls.push(['send', payload, {
+          categoryId: getConfig('scouting_category_id'),
+          archiveId: getConfig('scout_reports_channel_id'),
+        }]);
         return { id: 'panel-msg', async pin() {} };
       },
     },
@@ -129,5 +132,9 @@ test('handleSetup scout creates infrastructure before deploying panel', async ()
 
   assert.equal(getConfig('scouting_category_id'), 'created-1');
   assert.equal(getConfig('scout_reports_channel_id'), 'created-2');
+  assert.deepEqual(calls.find(([kind]) => kind === 'send')?.[2], {
+    categoryId: 'created-1',
+    archiveId: 'created-2',
+  });
   assert.equal(calls.at(-1)[1].content, '✅ scout panel deployed and pinned.');
 });
