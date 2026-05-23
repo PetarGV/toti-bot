@@ -8,6 +8,8 @@ import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl } from '../utils/travianUrl.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
+import { ensureScoutInfrastructure, createScoutTempChannel } from '../utils/scoutChannels.js';
+import { generateScoutCode } from '../utils/scoutReports.js';
 import { registerRenderer } from './calls.js';
 import { notifyAuthorOfPledge, notifyAuthorIfMilestone } from './notify.js';
 import { getHomeCoordsString } from './profile.js';
@@ -38,64 +40,115 @@ export async function handleScoutButton(interaction) {
     .setRequired(false)
     .setMaxLength(500);
 
+  const minScoutsInput = new TextInputBuilder()
+    .setCustomId('min_scouts')
+    .setLabel('Minimum scouts needed (optional)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(50);
+
   modal.addComponents(
     new ActionRowBuilder().addComponents(coordsInput),
     new ActionRowBuilder().addComponents(notesInput),
+    new ActionRowBuilder().addComponents(minScoutsInput),
   );
 
   await interaction.showModal(modal);
 }
 
 // ── Core: insert scout call + post embed ─────────────────────────────────────
-async function createScoutCall(interaction, { x, y, notes }) {
-  const payload = JSON.stringify({ notes: notes || null });
+function getOptionalTextInputValue(fields, customId) {
+  if (!fields?.getTextInputValue) return null;
+  try {
+    return fields.getTextInputValue(customId) || null;
+  } catch {
+    return null;
+  }
+}
+
+async function createScoutCall(interaction, { x, y, notes, minScouts }) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply();
+  }
+
+  const scoutCode = generateScoutCode();
+  const guildId = interaction.guildId || interaction.guild?.id || null;
+  const target = prepare('SELECT player, alliance FROM x_world WHERE x = ? AND y = ?').get(x, y) || null;
+  const targetPlayer = target?.player || null;
+  const targetAlliance = target?.alliance || null;
+  const { category } = await ensureScoutInfrastructure(interaction.guild);
+  const tempChannel = await createScoutTempChannel(interaction.guild, {
+    category,
+    code: scoutCode,
+    x,
+    y,
+    player: targetPlayer,
+    topic: `Scout ${scoutCode} for ${formatCoords(x, y)}`,
+  });
+
+  const payload = JSON.stringify({
+    notes: notes || null,
+    minScouts: minScouts || null,
+    targetPlayer,
+    targetAlliance,
+    tempChannelId: tempChannel.id,
+    scoutCode,
+    guildId,
+  });
 
   const result = prepare(`
     INSERT INTO calls (type, author_id, x, y, deadline, channel_id, status, payload)
     VALUES ('scout', ?, ?, ?, NULL, ?, 'open', ?)
-  `).run(interaction.user.id, x, y, interaction.channel.id, payload);
+  `).run(interaction.user.id, x, y, tempChannel.id, payload);
 
   const callId = result.lastInsertRowid;
   inc('callsCreated');
+
+  prepare(`
+    INSERT INTO scout_reports (call_id, scout_code, temp_channel_id)
+    VALUES (?, ?, ?)
+  `).run(callId, scoutCode, tempChannel.id);
 
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   const embed = buildScoutEmbed(call, []);
   const components = buildScoutComponents(call);
 
-  const msg = await interaction.reply({
-    content: '',
+  const msg = await tempChannel.send({
     embeds: [embed],
     components,
-    fetchReply: true,
   });
 
   prepare('UPDATE calls SET message_id = ? WHERE id = ?').run(msg.id, callId);
+
+  await interaction.editReply({ content: `Scout request created: <#${tempChannel.id}>` });
 }
 
 // ── Modal submit: scout:create ────────────────────────────────────────────────
 export async function handleScoutCreateModal(interaction) {
   const coordsStr = interaction.fields.getTextInputValue('coords');
   const notes     = interaction.fields.getTextInputValue('notes') || null;
+  const minScouts = getOptionalTextInputValue(interaction.fields, 'min_scouts');
 
   const coords = parseCoords(coordsStr);
   if (!coords) {
     return interaction.reply({ content: `❌ Invalid coordinates: \`${coordsStr}\`.`, ephemeral: true });
   }
 
-  await createScoutCall(interaction, { x: coords.x, y: coords.y, notes });
+  await createScoutCall(interaction, { x: coords.x, y: coords.y, notes, minScouts });
 }
 
 // ── Slash command handler ─────────────────────────────────────────────────────
 export async function handleScoutCommand(interaction) {
   const coordsStr = interaction.options.getString('coords');
   const notes     = interaction.options.getString('notes') || null;
+  const minScouts = interaction.options.getString('min-scouts') || null;
 
   const coords = parseCoords(coordsStr);
   if (!coords) {
     return interaction.reply({ content: '❌ Invalid coordinates.', ephemeral: true });
   }
 
-  await createScoutCall(interaction, { x: coords.x, y: coords.y, notes });
+  await createScoutCall(interaction, { x: coords.x, y: coords.y, notes, minScouts });
 }
 
 // ── Response button handlers ──────────────────────────────────────────────────
