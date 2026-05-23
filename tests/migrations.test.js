@@ -80,6 +80,14 @@ test('migration creates scout_reports table with lifecycle columns', async () =>
   await setupTestDb();
   resetTables();
 
+  exec('DROP TABLE scout_reports');
+
+  const beforeCols = prepare(`PRAGMA table_info(scout_reports)`).all();
+  assert.deepEqual(beforeCols, []);
+
+  const { runMigrations } = await import('../src/db/migrations.js');
+  runMigrations();
+
   const cols = prepare(`PRAGMA table_info(scout_reports)`).all();
   const byName = Object.fromEntries(cols.map(c => [c.name, c]));
 
@@ -103,4 +111,22 @@ test('migration creates scout_reports table with lifecycle columns', async () =>
   assert.equal(byName.call_id.pk, 1);
   assert.equal(byName.scout_code.notnull, 1);
   assert.equal(byName.temp_channel_id.notnull, 1);
+
+  exec('PRAGMA foreign_keys = ON');
+
+  const call = prepare(`
+    INSERT INTO calls (type, author_id, x, y)
+    VALUES (?, ?, ?, ?)
+    RETURNING id
+  `).get('scout', 'reporter-1', 10, 20);
+
+  prepare(`
+    INSERT INTO scout_reports (call_id, scout_code, temp_channel_id)
+    VALUES (?, ?, ?)
+  `).run(call.id, 'SC-1', 'temp-chan');
+
+  prepare('DELETE FROM calls WHERE id = ?').run(call.id);
+
+  const report = prepare('SELECT * FROM scout_reports WHERE call_id = ?').get(call.id);
+  assert.equal(report, undefined);
 });
