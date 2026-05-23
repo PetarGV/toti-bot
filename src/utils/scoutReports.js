@@ -4,6 +4,7 @@ export const REPORT_UPLOAD_WINDOW_SEC = 10 * 60;
 export const TEMP_CHANNEL_DELETE_DELAY_SEC = 24 * 60 * 60;
 
 const CODE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
+const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
 
 export function generateScoutCode(random = Math.random) {
@@ -41,7 +42,7 @@ export function parseScoutCommitmentAmount(text) {
 
 export function isValidScoutImageAttachment(attachment) {
   const contentType = String(attachment?.contentType || '').toLowerCase();
-  if (contentType.startsWith('image/')) return true;
+  if (IMAGE_MIME_TYPES.has(contentType)) return true;
   const name = String(attachment?.name || '').toLowerCase();
   const ext = name.includes('.') ? name.split('.').pop() : '';
   return IMAGE_EXTENSIONS.has(ext);
