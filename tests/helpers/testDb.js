@@ -19,6 +19,7 @@ export async function setupTestDb() {
 const ALL_TABLES = [
   'user_ign_links',
   'travian_accounts',
+  'scout_reports',
   'pledges',
   'calls',
   'panels',

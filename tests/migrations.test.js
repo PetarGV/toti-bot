@@ -75,3 +75,32 @@ test('existing running timer rows survive migration unchanged', async () => {
   assert.equal(row.paused, 0);
   assert.equal(row.remaining_sec, null);
 });
+
+test('migration creates scout_reports table with lifecycle columns', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const cols = prepare(`PRAGMA table_info(scout_reports)`).all();
+  const byName = Object.fromEntries(cols.map(c => [c.name, c]));
+
+  for (const name of [
+    'call_id',
+    'scout_code',
+    'temp_channel_id',
+    'archive_channel_id',
+    'archive_message_id',
+    'reporter_id',
+    'report_note',
+    'screenshot_url',
+    'reported_at',
+    'delete_after',
+    'temp_deleted_at',
+    'created_at',
+  ]) {
+    assert.ok(byName[name], `${name} column exists`);
+  }
+
+  assert.equal(byName.call_id.pk, 1);
+  assert.equal(byName.scout_code.notnull, 1);
+  assert.equal(byName.temp_channel_id.notnull, 1);
+});
