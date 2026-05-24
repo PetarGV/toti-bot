@@ -95,32 +95,58 @@ async function createScoutCall(interaction, { x, y, notes, minScouts }) {
     scoutCode,
     guildId,
   });
+  let callId = null;
 
-  const result = prepare(`
-    INSERT INTO calls (type, author_id, x, y, deadline, channel_id, status, payload)
-    VALUES ('scout', ?, ?, ?, NULL, ?, 'open', ?)
-  `).run(interaction.user.id, x, y, tempChannel.id, payload);
+  try {
+    const result = prepare(`
+      INSERT INTO calls (type, author_id, x, y, deadline, channel_id, status, payload)
+      VALUES ('scout', ?, ?, ?, NULL, ?, 'open', ?)
+    `).run(interaction.user.id, x, y, tempChannel.id, payload);
 
-  const callId = result.lastInsertRowid;
-  inc('callsCreated');
+    callId = result.lastInsertRowid;
+    inc('callsCreated');
 
-  prepare(`
-    INSERT INTO scout_reports (call_id, scout_code, temp_channel_id)
-    VALUES (?, ?, ?)
-  `).run(callId, scoutCode, tempChannel.id);
+    prepare(`
+      INSERT INTO scout_reports (call_id, scout_code, temp_channel_id)
+      VALUES (?, ?, ?)
+    `).run(callId, scoutCode, tempChannel.id);
 
-  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
-  const embed = buildScoutEmbed(call, []);
-  const components = buildScoutComponents(call);
+    const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+    const embed = buildScoutEmbed(call, []);
+    const components = buildScoutComponents(call);
 
-  const msg = await tempChannel.send({
-    embeds: [embed],
-    components,
-  });
+    const msg = await tempChannel.send({
+      embeds: [embed],
+      components,
+    });
 
-  prepare('UPDATE calls SET message_id = ? WHERE id = ?').run(msg.id, callId);
+    prepare('UPDATE calls SET message_id = ? WHERE id = ?').run(msg.id, callId);
 
-  await interaction.editReply({ content: `Scout request created: <#${tempChannel.id}>` });
+    await interaction.editReply({ content: `Scout request created: <#${tempChannel.id}>` });
+  } catch (err) {
+    if (callId != null) {
+      try {
+        prepare('DELETE FROM scout_reports WHERE call_id = ?').run(callId);
+      } catch (cleanupErr) {
+        logger.warn('cleanup scout_reports failed:', cleanupErr.message);
+      }
+      try {
+        prepare('DELETE FROM calls WHERE id = ?').run(callId);
+      } catch (cleanupErr) {
+        logger.warn('cleanup calls failed:', cleanupErr.message);
+      }
+    }
+
+    if (typeof tempChannel?.delete === 'function') {
+      try {
+        await tempChannel.delete();
+      } catch (cleanupErr) {
+        logger.warn('cleanup temp channel failed:', cleanupErr.message);
+      }
+    }
+
+    throw err;
+  }
 }
 
 // ── Modal submit: scout:create ────────────────────────────────────────────────
@@ -275,9 +301,15 @@ export function buildScoutEmbed(call, pledges) {
   // x_world enrichment
   let coordsExtra = '';
   try {
-    const xw = prepare('SELECT player, alliance FROM x_world WHERE x = ? AND y = ?').get(call.x, call.y);
-    if (xw?.player) {
-      coordsExtra = ` — ${xw.player}${xw.alliance ? ` [${xw.alliance}]` : ''}`;
+    const player = payload.targetPlayer || null;
+    const alliance = payload.targetAlliance || null;
+    if (player) {
+      coordsExtra = ` — ${player}${alliance ? ` [${alliance}]` : ''}`;
+    } else {
+      const xw = prepare('SELECT player, alliance FROM x_world WHERE x = ? AND y = ?').get(call.x, call.y);
+      if (xw?.player) {
+        coordsExtra = ` — ${xw.player}${xw.alliance ? ` [${xw.alliance}]` : ''}`;
+      }
     }
   } catch { /* x_world may not exist */ }
 

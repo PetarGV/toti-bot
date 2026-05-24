@@ -3,10 +3,13 @@ import assert from 'node:assert/strict';
 import { ChannelType } from 'discord.js';
 import { setupTestDb, resetTables } from '../helpers/testDb.js';
 import { prepare } from '../../src/db/client.js';
-import { handleScoutCommand } from '../../src/handlers/scoutCall.js';
+import { buildScoutEmbed, handleScoutCommand } from '../../src/handlers/scoutCall.js';
 
-function fakeGuild() {
+function fakeGuild(options = {}) {
   const channels = [];
+  const {
+    tempChannelSendError = null,
+  } = options;
   return {
     id: 'guild-1',
     channels: {
@@ -18,9 +21,16 @@ function fakeGuild() {
           type: payload.type,
           parentId: payload.parent ?? null,
           topic: payload.topic ?? null,
+          deleted: false,
           async send(messagePayload) {
+            if (payload.type === ChannelType.GuildText && payload.parent && tempChannelSendError) {
+              throw tempChannelSendError;
+            }
             channel._sent = messagePayload;
             return { id: 'scout-message-1' };
+          },
+          async delete() {
+            channel.deleted = true;
           },
         };
         channels.push(channel);
@@ -90,4 +100,47 @@ test('scout command creates temp channel and stores scout report metadata', asyn
   assert.match(guild._channels.find(c => c.id === call.channel_id).name, /^scout-[a-z0-9]{4}-x-50-y72-enemy-name$/);
   assert.equal(guild._channels.find(c => c.id === call.channel_id).type, ChannelType.GuildText);
   assert.match(interaction._calls.at(-1)[1].content, /Scout request created:/);
+});
+
+test('scout command cleans up rows and temp channel when temp channel send fails', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const guild = fakeGuild({ tempChannelSendError: new Error('send failed') });
+  const interaction = fakeScoutInteraction(guild);
+
+  await assert.rejects(handleScoutCommand(interaction), /send failed/);
+
+  assert.equal(prepare('SELECT COUNT(*) AS count FROM calls').get().count, 0);
+  assert.equal(prepare('SELECT COUNT(*) AS count FROM scout_reports').get().count, 0);
+
+  const tempChannel = guild._channels.find(channel => /^scout-[a-z0-9]{4}-/.test(channel.name));
+  assert.equal(tempChannel?.deleted, true);
+});
+
+test('buildScoutEmbed prefers stored target snapshot over current x_world row', async () => {
+  await setupTestDb();
+  resetTables();
+
+  prepare('INSERT INTO x_world (id, x, y, player, alliance) VALUES (?, ?, ?, ?, ?)')
+    .run(1, -50, 72, 'New Player', 'NEW');
+
+  const call = {
+    id: 42,
+    type: 'scout',
+    author_id: 'requester-1',
+    x: -50,
+    y: 72,
+    status: 'open',
+    payload: JSON.stringify({
+      targetPlayer: 'Original Player',
+      targetAlliance: 'OLD',
+    }),
+  };
+
+  const embed = buildScoutEmbed(call, []);
+  const coordsField = embed.data.fields.find(field => field.name === 'Coords');
+
+  assert.match(coordsField.value, /Original Player \[OLD\]/);
+  assert.doesNotMatch(coordsField.value, /New Player \[NEW\]/);
 });
