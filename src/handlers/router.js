@@ -39,6 +39,7 @@ import {
   handleScoutButton,
   handleScoutCreateModal,
   handleScoutJoinButton,
+  handleScoutJoinModal,
   handleScoutReportButton,
   handleScoutCloseButton,
   handleScoutReportModal,
@@ -236,6 +237,7 @@ export async function routeModal(interaction) {
     if (id.startsWith('combat:pledge_add_submit:'))  return await handleCombatPledgeAddModal(interaction);
     if (id.startsWith('combat:pick_submit:'))        return await handleCombatPickModal(interaction);
     if (id === 'scout:create')                  return await handleScoutCreateModal(interaction);
+    if (id.startsWith('scout:join_submit:'))    return await handleScoutJoinModal(interaction);
     if (id.startsWith('scout:report_submit:'))  return await handleScoutReportModal(interaction);
     if (id === 'profile:save')                  return await handleProfileModal(interaction);
     if (id === 'profile:save-ign')              return await handleEditIgnModal(interaction);

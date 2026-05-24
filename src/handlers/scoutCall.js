@@ -9,7 +9,15 @@ import { mapUrl } from '../utils/travianUrl.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { ensureScoutInfrastructure, createScoutTempChannel } from '../utils/scoutChannels.js';
-import { generateScoutCode } from '../utils/scoutReports.js';
+import {
+  decodeScoutCommitmentAmount,
+  decodeScoutReportText,
+  encodeScoutCommitmentAmount,
+  encodeScoutReportText,
+  generateScoutCode,
+  isScoutCommitment,
+  parseScoutCommitmentAmount,
+} from '../utils/scoutReports.js';
 import { registerRenderer } from './calls.js';
 import { notifyAuthorOfPledge, notifyAuthorIfMilestone } from './notify.js';
 import { getHomeCoordsString } from './profile.js';
@@ -181,7 +189,7 @@ export async function handleScoutCommand(interaction) {
 
 // ── Response button handlers ──────────────────────────────────────────────────
 
-// scout:join:<callId> — toggles "On it" pledge
+// scout:join:<callId> opens commitment amount modal
 export async function handleScoutJoinButton(interaction) {
   const callId = parseInt(interaction.customId.split(':')[2], 10);
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
@@ -189,35 +197,66 @@ export async function handleScoutJoinButton(interaction) {
     return interaction.reply({ content: 'This scout request is no longer open.', ephemeral: true });
   }
 
-  const existing = prepare('SELECT id, amount FROM pledges WHERE call_id = ? AND user_id = ?')
+  const existing = prepare('SELECT amount FROM pledges WHERE call_id = ? AND user_id = ?')
     .get(callId, interaction.user.id);
 
-  let msg;
-  if (existing && existing.amount === 'On it') {
-    // Toggle off — remove commitment (but not if they have a report)
-    prepare('DELETE FROM pledges WHERE call_id = ? AND user_id = ?').run(callId, interaction.user.id);
-    msg = '✅ Removed your "On it" commitment.';
-  } else if (!existing) {
-    prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
-      .run(callId, interaction.user.id, 'On it');
-    inc('pledgesSubmitted');
-    msg = '✅ Marked as "On it".';
-  } else {
-    // They have a report — don't overwrite
+  const modal = new ModalBuilder()
+    .setCustomId(`scout:join_submit:${callId}`)
+    .setTitle('Scout Commitment');
+
+  const amountInput = new TextInputBuilder()
+    .setCustomId('amount')
+    .setLabel('Scouts you can send')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setPlaceholder('75 scouts')
+    .setMaxLength(100);
+
+  const existingCommitment = decodeScoutCommitmentAmount(existing?.amount);
+  if (existingCommitment) {
+    amountInput.setValue(existingCommitment);
+  }
+
+  modal.addComponents(new ActionRowBuilder().addComponents(amountInput));
+  return interaction.showModal(modal);
+}
+
+export async function handleScoutJoinModal(interaction) {
+  const callId = parseInt(interaction.customId.split(':')[2], 10);
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call || call.status !== 'open') {
+    return interaction.reply({ content: 'This scout request is no longer open.', ephemeral: true });
+  }
+
+  const amountText = interaction.fields.getTextInputValue('amount').trim();
+  const amount = amountText || 'On it';
+  if (amountText && !parseScoutCommitmentAmount(amountText)) {
+    return interaction.reply({ content: 'Scout commitment must start with a positive number, or leave it blank for On it.', ephemeral: true });
+  }
+  const storedAmount = amountText ? encodeScoutCommitmentAmount(amountText) : 'On it';
+  const existing = prepare('SELECT id, amount FROM pledges WHERE call_id = ? AND user_id = ?')
+    .get(callId, interaction.user.id);
+  if (existing && !isScoutCommitment(existing.amount)) {
     return interaction.reply({ content: 'You already submitted a report. Use "Submit Report" to update it.', ephemeral: true });
+  }
+
+  if (existing) {
+    prepare('UPDATE pledges SET amount = ? WHERE call_id = ? AND user_id = ?')
+      .run(storedAmount, callId, interaction.user.id);
+  } else {
+    prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
+      .run(callId, interaction.user.id, storedAmount);
+    inc('pledgesSubmitted');
   }
 
   const { refreshCall } = await import('./calls.js');
   await refreshCall(interaction.client, callId);
-  await interaction.reply({ content: msg, ephemeral: true });
+  await interaction.reply({ content: `Scout commitment recorded: ${amount}`, ephemeral: true });
 
-  if (!existing) {
-    notifyAuthorOfPledge(interaction.client, callId, interaction.user.id, 'On it').catch(err => logger.warn('notify pledge:', err.message));
-    notifyAuthorIfMilestone(interaction.client, callId).catch(err => logger.warn('notify milestone:', err.message));
-  }
+  notifyAuthorOfPledge(interaction.client, callId, interaction.user.id, amount).catch(err => logger.warn('notify pledge:', err.message));
+  notifyAuthorIfMilestone(interaction.client, callId).catch(err => logger.warn('notify milestone:', err.message));
 }
 
-// scout:report:<callId> — opens modal
 export async function handleScoutReportButton(interaction) {
   const callId = interaction.customId.split(':')[2];
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
@@ -271,15 +310,16 @@ export async function handleScoutReportModal(interaction) {
     return interaction.reply({ content: '❌ Report cannot be empty.', ephemeral: true });
   }
 
+  const storedReport = encodeScoutReportText(report);
   const existing = prepare('SELECT id FROM pledges WHERE call_id = ? AND user_id = ?')
     .get(callId, interaction.user.id);
 
   if (existing) {
     prepare('UPDATE pledges SET amount = ? WHERE call_id = ? AND user_id = ?')
-      .run(report, callId, interaction.user.id);
+      .run(storedReport, callId, interaction.user.id);
   } else {
     prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
-      .run(callId, interaction.user.id, report);
+      .run(callId, interaction.user.id, storedReport);
     inc('pledgesSubmitted');
   }
 
@@ -325,14 +365,31 @@ export function buildScoutEmbed(call, pledges) {
 
   if (payload.notes) embed.addFields({ name: 'Notes', value: payload.notes, inline: false });
 
-  // Separate pledges into "On it" and "report submitted"
-  const onItList = pledges.filter(p => p.amount === 'On it');
-  const reports  = pledges.filter(p => p.amount !== 'On it');
+  const minimumScouts = parseScoutCommitmentAmount(payload.minScouts);
+  if (minimumScouts) {
+    const committedScouts = pledges.reduce((total, pledge) => (
+      total + (parseScoutCommitmentAmount(decodeScoutCommitmentAmount(pledge.amount)) ?? 0)
+    ), 0);
+    embed.addFields(
+      { name: 'Minimum scouts', value: String(minimumScouts), inline: true },
+      { name: 'Committed scouts', value: String(committedScouts), inline: true },
+      { name: 'Remaining scouts', value: String(Math.max(minimumScouts - committedScouts, 0)), inline: true },
+    );
+  }
+
+  // Separate status commitments from free-text scout reports.
+  const onItList = pledges.filter(p => isScoutCommitment(p.amount));
+  const reports  = pledges
+    .map(p => ({ ...p, reportText: decodeScoutReportText(p.amount) }))
+    .filter(p => p.reportText !== null);
 
   if (onItList.length) {
     embed.addFields({
       name: `On it (${onItList.length})`,
-      value: onItList.map(p => `<@${p.user_id}>`).join(', '),
+      value: onItList.map(p => {
+        const commitment = decodeScoutCommitmentAmount(p.amount);
+        return commitment ? `<@${p.user_id}> (${commitment})` : `<@${p.user_id}>`;
+      }).join(', '),
       inline: false,
     });
   } else {
@@ -341,7 +398,7 @@ export function buildScoutEmbed(call, pledges) {
 
   if (reports.length) {
     const reportBlocks = reports.map(p => {
-      const truncated = p.amount.length > 500 ? p.amount.slice(0, 497) + '...' : p.amount;
+      const truncated = p.reportText.length > 500 ? p.reportText.slice(0, 497) + '...' : p.reportText;
       return `**<@${p.user_id}>:**\n${truncated}`;
     }).join('\n\n');
     embed.addFields({ name: `Reports (${reports.length})`, value: reportBlocks, inline: false });

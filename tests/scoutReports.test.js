@@ -6,7 +6,13 @@ import {
   REPORT_UPLOAD_WINDOW_SEC,
   TEMP_CHANNEL_DELETE_DELAY_SEC,
   buildScoutChannelName,
+  decodeScoutCommitmentAmount,
+  decodeScoutReportText,
+  encodeScoutCommitmentAmount,
+  encodeScoutReportText,
   generateScoutCode,
+  isScoutCommitment,
+  isScoutReport,
   parseScoutCommitmentAmount,
   isValidScoutImageAttachment,
 } from '../src/utils/scoutReports.js';
@@ -53,6 +59,24 @@ test('parseScoutCommitmentAmount returns numeric commitments only', () => {
   assert.equal(parseScoutCommitmentAmount('1,250 scouts'), 1250);
   assert.equal(parseScoutCommitmentAmount('On it'), null);
   assert.equal(parseScoutCommitmentAmount(''), null);
+});
+
+test('scout pledge helpers classify typed and legacy amounts', () => {
+  const typedCommitment = encodeScoutCommitmentAmount('75 scouts');
+  const typedReport = encodeScoutReportText('Wall is empty');
+
+  assert.equal(isScoutCommitment('On it'), true);
+  assert.equal(isScoutCommitment(typedCommitment), true);
+  assert.equal(isScoutReport(typedCommitment), false);
+  assert.equal(decodeScoutCommitmentAmount(typedCommitment), '75 scouts');
+
+  assert.equal(isScoutReport(typedReport), true);
+  assert.equal(isScoutCommitment(typedReport), false);
+  assert.equal(decodeScoutReportText(typedReport), 'Wall is empty');
+
+  assert.equal(isScoutReport('Legacy wall report'), true);
+  assert.equal(decodeScoutReportText('Legacy wall report'), 'Legacy wall report');
+  assert.equal(decodeScoutReportText('On it'), null);
 });
 
 test('isValidScoutImageAttachment accepts known image attachments', () => {

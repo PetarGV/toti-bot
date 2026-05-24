@@ -3,7 +3,18 @@ import assert from 'node:assert/strict';
 import { ChannelType } from 'discord.js';
 import { setupTestDb, resetTables } from '../helpers/testDb.js';
 import { prepare } from '../../src/db/client.js';
-import { buildScoutEmbed, handleScoutCommand } from '../../src/handlers/scoutCall.js';
+import { routeModal } from '../../src/handlers/router.js';
+import {
+  buildScoutEmbed,
+  handleScoutCommand,
+  handleScoutJoinButton,
+  handleScoutJoinModal,
+  handleScoutReportModal,
+} from '../../src/handlers/scoutCall.js';
+
+function scoutCommitment(amount) {
+  return JSON.stringify({ kind: 'scout_commitment', amount });
+}
 
 function fakeGuild(options = {}) {
   const channels = [];
@@ -82,6 +93,98 @@ function fakeScoutInteractionWithReplyError(guild) {
     throw new Error('reply failed');
   };
   return interaction;
+}
+
+function insertScoutCall(overrides = {}) {
+  const result = prepare(`
+    INSERT INTO calls (type, author_id, x, y, deadline, message_id, channel_id, status, payload)
+    VALUES ('scout', ?, ?, ?, NULL, ?, ?, ?, ?)
+  `).run(
+    overrides.authorId ?? 'requester-1',
+    overrides.x ?? -50,
+    overrides.y ?? 72,
+    overrides.messageId ?? 'message-1',
+    overrides.channelId ?? 'channel-1',
+    overrides.status ?? 'open',
+    JSON.stringify(overrides.payload ?? {}),
+  );
+  return result.lastInsertRowid;
+}
+
+function fakeRefreshClient(calls) {
+  return {
+    channels: {
+      async fetch(channelId) {
+        calls.push(['fetchChannel', channelId]);
+        return {
+          messages: {
+            async fetch(messageId) {
+              calls.push(['fetchMessage', messageId]);
+              return {
+                async edit(payload) {
+                  calls.push(['editMessage', payload]);
+                },
+              };
+            },
+          },
+        };
+      },
+    },
+  };
+}
+
+function fakeScoutJoinButtonInteraction({ callId, userId = 'scout-1' }) {
+  const calls = [];
+  return {
+    customId: `scout:join:${callId}`,
+    user: { id: userId },
+    async reply(payload) {
+      calls.push(['reply', payload]);
+      this.replied = true;
+    },
+    async showModal(modal) {
+      calls.push(['showModal', modal.toJSON()]);
+    },
+    _calls: calls,
+  };
+}
+
+function fakeScoutJoinModalInteraction({ callId, userId = 'scout-1', amount = '50' }) {
+  const calls = [];
+  return {
+    customId: `scout:join_submit:${callId}`,
+    user: { id: userId },
+    client: fakeRefreshClient(calls),
+    fields: {
+      getTextInputValue(name) {
+        return name === 'amount' ? amount : '';
+      },
+    },
+    async reply(payload) {
+      calls.push(['reply', payload]);
+      this.replied = true;
+    },
+    _calls: calls,
+  };
+}
+
+function fakeScoutReportModalInteraction({ callId, userId = 'scout-1', report = 'Report text' }) {
+  const calls = [];
+  return {
+    customId: `scout:report_submit:${callId}`,
+    user: { id: userId },
+    client: fakeRefreshClient(calls),
+    fields: {
+      getTextInputValue(name) {
+        return name === 'report' ? report : '';
+      },
+    },
+    async reply(payload) {
+      calls.push(['reply', payload]);
+      this.replied = true;
+    },
+    _calls: calls,
+  };
 }
 
 test('scout command creates temp channel and stores scout report metadata', async () => {
@@ -174,4 +277,207 @@ test('buildScoutEmbed prefers stored target snapshot over current x_world row', 
 
   assert.match(coordsField.value, /Original Player \[OLD\]/);
   assert.doesNotMatch(coordsField.value, /New Player \[NEW\]/);
+});
+
+test('buildScoutEmbed renders minimum, committed, and remaining scout progress', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const call = {
+    id: 42,
+    type: 'scout',
+    author_id: 'requester-1',
+    x: -50,
+    y: 72,
+    status: 'open',
+    payload: JSON.stringify({ minScouts: '200' }),
+  };
+
+  const embed = buildScoutEmbed(call, [
+    { user_id: 'scout-1', amount: scoutCommitment('50') },
+    { user_id: 'scout-2', amount: 'On it' },
+    { user_id: 'scout-3', amount: scoutCommitment('75 scouts') },
+  ]);
+
+  const fields = Object.fromEntries(embed.data.fields.map(field => [field.name, field.value]));
+  assert.equal(fields['Minimum scouts'], '200');
+  assert.equal(fields['Committed scouts'], '125');
+  assert.equal(fields['Remaining scouts'], '75');
+
+  const commitmentField = embed.data.fields.find(field => field.name.startsWith('On it'));
+  assert.match(commitmentField.value, /<@scout-1> \(50\)/);
+  assert.match(commitmentField.value, /<@scout-2>/);
+  assert.match(commitmentField.value, /<@scout-3> \(75 scouts\)/);
+  assert.equal(embed.data.fields.some(field => field.name.startsWith('Reports')), false);
+});
+
+test('buildScoutEmbed keeps number-leading report text out of scout progress', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const call = {
+    id: 43,
+    type: 'scout',
+    author_id: 'requester-1',
+    x: -50,
+    y: 72,
+    status: 'open',
+    payload: JSON.stringify({ minScouts: '200' }),
+  };
+
+  const embed = buildScoutEmbed(call, [
+    { user_id: 'scout-1', amount: scoutCommitment('75 scouts') },
+    { user_id: 'scout-2', amount: '200 scouts found in village' },
+  ]);
+
+  const fields = Object.fromEntries(embed.data.fields.map(field => [field.name, field.value]));
+  assert.equal(fields['Committed scouts'], '75');
+  assert.equal(fields['Remaining scouts'], '125');
+
+  const commitmentField = embed.data.fields.find(field => field.name.startsWith('On it'));
+  assert.match(commitmentField.value, /<@scout-1> \(75 scouts\)/);
+  assert.doesNotMatch(commitmentField.value, /scout-2/);
+
+  const reportsField = embed.data.fields.find(field => field.name.startsWith('Reports'));
+  assert.match(reportsField.value, /<@scout-2>/);
+  assert.match(reportsField.value, /200 scouts found in village/);
+});
+
+test('buildScoutEmbed treats raw commitment-looking text as a scout report', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const call = {
+    id: 44,
+    type: 'scout',
+    author_id: 'requester-1',
+    x: -50,
+    y: 72,
+    status: 'open',
+    payload: JSON.stringify({ minScouts: '200' }),
+  };
+
+  const embed = buildScoutEmbed(call, [
+    { user_id: 'scout-1', amount: 'commitment:75 scouts found' },
+  ]);
+
+  const fields = Object.fromEntries(embed.data.fields.map(field => [field.name, field.value]));
+  assert.equal(fields['Committed scouts'], '0');
+  assert.equal(fields['Remaining scouts'], '200');
+
+  const commitmentField = embed.data.fields.find(field => field.name.startsWith('On it'));
+  assert.doesNotMatch(commitmentField.value, /scout-1/);
+
+  const reportsField = embed.data.fields.find(field => field.name.startsWith('Reports'));
+  assert.match(reportsField.value, /<@scout-1>/);
+  assert.match(reportsField.value, /commitment:75 scouts found/);
+});
+
+test('handleScoutJoinButton opens amount modal instead of toggling immediately', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall();
+
+  const interaction = fakeScoutJoinButtonInteraction({ callId });
+
+  await handleScoutJoinButton(interaction);
+
+  assert.equal(prepare('SELECT COUNT(*) AS count FROM pledges').get().count, 0);
+  assert.equal(interaction._calls.length, 1);
+  assert.equal(interaction._calls[0][0], 'showModal');
+  const modal = interaction._calls[0][1];
+  assert.equal(modal.custom_id, `scout:join_submit:${callId}`);
+  assert.equal(modal.title, 'Scout Commitment');
+  assert.equal(modal.components[0].components[0].custom_id, 'amount');
+  assert.equal(modal.components[0].components[0].required, false);
+});
+
+test('handleScoutJoinModal stores numeric commitment, refreshes call, and replies ephemerally', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall({ payload: { minScouts: '200' } });
+  const interaction = fakeScoutJoinModalInteraction({ callId, amount: ' 75 scouts ' });
+
+  await handleScoutJoinModal(interaction);
+
+  const pledge = prepare('SELECT user_id, amount FROM pledges WHERE call_id = ?').get(callId);
+  assert.deepEqual(pledge, { user_id: 'scout-1', amount: scoutCommitment('75 scouts') });
+  assert.equal(interaction._calls.some(call => call[0] === 'editMessage'), true);
+  const reply = interaction._calls.find(call => call[0] === 'reply')[1];
+  assert.equal(reply.ephemeral, true);
+  assert.match(reply.content, /75 scouts/);
+});
+
+test('handleScoutJoinModal rejects non-numeric commitment input without storing or refreshing', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall({ payload: { minScouts: '200' } });
+  const interaction = fakeScoutJoinModalInteraction({ callId, amount: 'many scouts' });
+
+  await handleScoutJoinModal(interaction);
+
+  assert.equal(prepare('SELECT COUNT(*) AS count FROM pledges WHERE call_id = ?').get(callId).count, 0);
+  assert.equal(interaction._calls.some(call => call[0] === 'editMessage'), false);
+  const reply = interaction._calls.find(call => call[0] === 'reply')[1];
+  assert.equal(reply.ephemeral, true);
+  assert.match(reply.content, /number/i);
+});
+
+test('handleScoutJoinModal does not overwrite an existing scout report pledge', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall({ payload: { minScouts: '200' } });
+  prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
+    .run(callId, 'scout-1', 'Report says 500 scouts present');
+  const interaction = fakeScoutJoinModalInteraction({ callId, amount: '75' });
+
+  await handleScoutJoinModal(interaction);
+
+  const pledge = prepare('SELECT amount FROM pledges WHERE call_id = ? AND user_id = ?')
+    .get(callId, 'scout-1');
+  assert.equal(pledge.amount, 'Report says 500 scouts present');
+  assert.equal(interaction._calls.some(call => call[0] === 'editMessage'), false);
+  const reply = interaction._calls.find(call => call[0] === 'reply')[1];
+  assert.equal(reply.ephemeral, true);
+  assert.match(reply.content, /already submitted a report/i);
+});
+
+test('handleScoutReportModal stores commitment-looking report text without rendering it as committed scouts', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall({ payload: { minScouts: '200' } });
+  const interaction = fakeScoutReportModalInteraction({
+    callId,
+    report: ' commitment:75 scouts found ',
+  });
+
+  await handleScoutReportModal(interaction);
+
+  const pledge = prepare('SELECT user_id, amount FROM pledges WHERE call_id = ?').get(callId);
+  assert.deepEqual(pledge, {
+    user_id: 'scout-1',
+    amount: JSON.stringify({ kind: 'scout_report', text: 'commitment:75 scouts found' }),
+  });
+
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  const embed = buildScoutEmbed(call, [pledge]);
+  const fields = Object.fromEntries(embed.data.fields.map(field => [field.name, field.value]));
+  assert.equal(fields['Committed scouts'], '0');
+
+  const reportsField = embed.data.fields.find(field => field.name.startsWith('Reports'));
+  assert.match(reportsField.value, /commitment:75 scouts found/);
+  assert.doesNotMatch(reportsField.value, /\{"kind":"scout_report"/);
+  assert.equal(interaction._calls.some(callEntry => callEntry[0] === 'editMessage'), true);
+});
+
+test('router dispatches scout join submission modals to handleScoutJoinModal', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall();
+  const interaction = fakeScoutJoinModalInteraction({ callId, userId: 'scout-2', amount: '50' });
+
+  await routeModal(interaction);
+
+  const pledge = prepare('SELECT user_id, amount FROM pledges WHERE call_id = ?').get(callId);
+  assert.deepEqual(pledge, { user_id: 'scout-2', amount: scoutCommitment('50') });
 });

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupTestDb, resetTables } from './helpers/testDb.js';
 import { prepare } from '../src/db/client.js';
-import { groupByIgn } from '../src/handlers/leaderboard.js';
+import { groupByIgn, handleLeaderboardCommand } from '../src/handlers/leaderboard.js';
 import { setUserIgnFromInput, adminLink } from '../src/handlers/userIgnLinks.js';
 
 function seedMap(rows) {
@@ -48,4 +48,37 @@ test('groupByIgn ignores secondary links — only primary counts', async () => {
   assert.equal(out.length, 1);
   assert.equal(out[0].ign, 'Main');
   assert.equal(out[0].value, 5);
+});
+
+test('scout leaderboard counts reports but excludes typed commitments', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const callId = prepare(`
+    INSERT INTO calls (type, author_id, x, y)
+    VALUES ('scout', 'requester-1', 10, 20)
+    RETURNING id
+  `).get().id;
+
+  prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
+    .run(callId, 'committed-scout', JSON.stringify({ kind: 'scout_commitment', amount: '75 scouts' }));
+  prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
+    .run(callId, 'typed-reporter', JSON.stringify({ kind: 'scout_report', text: 'Wall is empty' }));
+  prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
+    .run(callId, 'legacy-reporter', 'Legacy wall report');
+
+  const replies = [];
+  const interaction = {
+    options: { getString: () => 'scouts' },
+    async reply(payload) {
+      replies.push(payload);
+    },
+  };
+
+  await handleLeaderboardCommand(interaction);
+
+  const description = replies[0].embeds[0].data.description;
+  assert.match(description, /<@typed-reporter>.*\*\*1\*\* reports/);
+  assert.match(description, /<@legacy-reporter>.*\*\*1\*\* reports/);
+  assert.doesNotMatch(description, /<@committed-scout>/);
 });

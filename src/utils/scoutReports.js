@@ -6,6 +6,8 @@ export const TEMP_CHANNEL_DELETE_DELAY_SEC = 24 * 60 * 60;
 const CODE_ALPHABET = 'abcdefghijklmnopqrstuvwxyz0123456789';
 const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
 const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'webp']);
+const SCOUT_COMMITMENT_KIND = 'scout_commitment';
+const SCOUT_REPORT_KIND = 'scout_report';
 
 export function generateScoutCode(random = Math.random) {
   let code = '';
@@ -38,6 +40,51 @@ export function parseScoutCommitmentAmount(text) {
   if (!match) return null;
   const amount = parseInt(match[1], 10);
   return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+export function encodeScoutCommitmentAmount(amount) {
+  return JSON.stringify({ kind: SCOUT_COMMITMENT_KIND, amount });
+}
+
+export function encodeScoutReportText(text) {
+  return JSON.stringify({ kind: SCOUT_REPORT_KIND, text });
+}
+
+export function decodeScoutPledge(amount) {
+  const raw = String(amount || '');
+  if (raw === 'On it') return { kind: SCOUT_COMMITMENT_KIND, amount: null };
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.kind === SCOUT_COMMITMENT_KIND && typeof parsed.amount === 'string') {
+      return { kind: SCOUT_COMMITMENT_KIND, amount: parsed.amount.trim() || null };
+    }
+    if (parsed?.kind === SCOUT_REPORT_KIND && typeof parsed.text === 'string') {
+      return { kind: SCOUT_REPORT_KIND, text: parsed.text };
+    }
+  } catch {
+    // Legacy/raw non-JSON rows are scout reports, except exact "On it" above.
+  }
+
+  return { kind: SCOUT_REPORT_KIND, text: raw };
+}
+
+export function decodeScoutCommitmentAmount(amount) {
+  const pledge = decodeScoutPledge(amount);
+  return pledge.kind === SCOUT_COMMITMENT_KIND ? pledge.amount : null;
+}
+
+export function decodeScoutReportText(amount) {
+  const pledge = decodeScoutPledge(amount);
+  return pledge.kind === SCOUT_REPORT_KIND ? pledge.text : null;
+}
+
+export function isScoutCommitment(amount) {
+  return decodeScoutPledge(amount).kind === SCOUT_COMMITMENT_KIND;
+}
+
+export function isScoutReport(amount) {
+  return decodeScoutPledge(amount).kind === SCOUT_REPORT_KIND;
 }
 
 export function isValidScoutImageAttachment(attachment) {
