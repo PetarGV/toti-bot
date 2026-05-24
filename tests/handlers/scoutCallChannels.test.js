@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ChannelType } from 'discord.js';
 import { setupTestDb, resetTables } from '../helpers/testDb.js';
-import { prepare } from '../../src/db/client.js';
+import { prepare, setConfig } from '../../src/db/client.js';
 import { routeModal } from '../../src/handlers/router.js';
 import {
   buildScoutEmbed,
@@ -11,6 +11,10 @@ import {
   handleScoutJoinModal,
   handleScoutReportModal,
 } from '../../src/handlers/scoutCall.js';
+import {
+  clearPendingScoutReportUploads,
+  handleScoutReportMessage,
+} from '../../src/handlers/scoutReportUpload.js';
 
 function scoutCommitment(amount) {
   return JSON.stringify({ kind: 'scout_commitment', amount });
@@ -108,7 +112,10 @@ function insertScoutCall(overrides = {}) {
     overrides.status ?? 'open',
     JSON.stringify(overrides.payload ?? {}),
   );
-  return result.lastInsertRowid;
+  const callId = result.lastInsertRowid;
+  prepare('INSERT INTO scout_reports (call_id, scout_code, temp_channel_id) VALUES (?, ?, ?)')
+    .run(callId, overrides.scoutCode ?? 'a1b2', overrides.channelId ?? 'channel-1');
+  return callId;
 }
 
 function fakeRefreshClient(calls) {
@@ -116,6 +123,20 @@ function fakeRefreshClient(calls) {
     channels: {
       async fetch(channelId) {
         calls.push(['fetchChannel', channelId]);
+        if (channelId === 'archive-channel') {
+          return {
+            async send(payload) {
+              calls.push(['archiveSend', payload]);
+              return {
+                id: 'archive-message-1',
+                url: 'https://discord.test/channels/guild/archive-channel/archive-message-1',
+                attachments: new Map([
+                  ['copy-1', { url: 'https://cdn.discordapp.test/archive/report.png' }],
+                ]),
+              };
+            },
+          };
+        }
         return {
           messages: {
             async fetch(messageId) {
@@ -168,20 +189,47 @@ function fakeScoutJoinModalInteraction({ callId, userId = 'scout-1', amount = '5
   };
 }
 
-function fakeScoutReportModalInteraction({ callId, userId = 'scout-1', report = 'Report text' }) {
+function fakeScoutReportModalInteraction({
+  callId,
+  userId = 'scout-1',
+  note = 'Report text',
+  channelId = 'channel-1',
+}) {
   const calls = [];
   return {
     customId: `scout:report_submit:${callId}`,
     user: { id: userId },
+    channelId,
     client: fakeRefreshClient(calls),
     fields: {
       getTextInputValue(name) {
-        return name === 'report' ? report : '';
+        return name === 'note' ? note : '';
       },
     },
     async reply(payload) {
       calls.push(['reply', payload]);
       this.replied = true;
+    },
+    _calls: calls,
+  };
+}
+
+function fakeScoutReportMessage({ client, userId = 'scout-1', channelId = 'channel-1' }) {
+  const calls = [];
+  return {
+    author: { id: userId, bot: false },
+    channelId,
+    client,
+    attachments: new Map([
+      ['att-1', {
+        id: 'att-1',
+        name: 'report.png',
+        url: 'https://cdn.discordapp.test/report.png',
+        contentType: 'image/png',
+      }],
+    ]),
+    async reply(payload) {
+      calls.push(['messageReply', payload]);
     },
     _calls: calls,
   };
@@ -442,32 +490,99 @@ test('handleScoutJoinModal does not overwrite an existing scout report pledge', 
   assert.match(reply.content, /already submitted a report/i);
 });
 
-test('handleScoutReportModal stores commitment-looking report text without rendering it as committed scouts', async () => {
+test('handleScoutReportModal starts pending upload from temp channel without writing a pledge', async () => {
   await setupTestDb();
   resetTables();
+  clearPendingScoutReportUploads();
+  setConfig('scout_reports_channel_id', 'archive-channel');
   const callId = insertScoutCall({ payload: { minScouts: '200' } });
   const interaction = fakeScoutReportModalInteraction({
     callId,
-    report: ' commitment:75 scouts found ',
+    note: ' commitment:75 scouts found ',
   });
 
   await handleScoutReportModal(interaction);
 
-  const pledge = prepare('SELECT user_id, amount FROM pledges WHERE call_id = ?').get(callId);
-  assert.deepEqual(pledge, {
-    user_id: 'scout-1',
-    amount: JSON.stringify({ kind: 'scout_report', text: 'commitment:75 scouts found' }),
+  assert.equal(prepare('SELECT COUNT(*) AS count FROM pledges WHERE call_id = ?').get(callId).count, 0);
+  assert.equal(interaction._calls.some(callEntry => callEntry[0] === 'editMessage'), false);
+  const reply = interaction._calls.find(callEntry => callEntry[0] === 'reply')[1];
+  assert.equal(reply.ephemeral, true);
+  assert.match(reply.content, /upload exactly one screenshot/i);
+  assert.match(reply.content, /10 minutes/i);
+
+  const message = fakeScoutReportMessage({ client: interaction.client });
+  assert.equal(await handleScoutReportMessage(message, 1_700_000_000), true);
+
+  const report = prepare('SELECT * FROM scout_reports WHERE call_id = ?').get(callId);
+  assert.equal(report.reporter_id, 'scout-1');
+  assert.equal(report.report_note, 'commitment:75 scouts found');
+  assert.equal(report.reported_at, 1_700_000_000);
+  assert.equal(report.delete_after, 1_700_086_400);
+  assert.equal(interaction._calls.some(callEntry => callEntry[0] === 'archiveSend'), true);
+  assert.equal(interaction._calls.some(callEntry => callEntry[0] === 'editMessage'), true);
+});
+
+test('handleScoutReportModal rejects submissions outside the scout temp channel', async () => {
+  await setupTestDb();
+  resetTables();
+  clearPendingScoutReportUploads();
+  const callId = insertScoutCall();
+  const interaction = fakeScoutReportModalInteraction({
+    callId,
+    channelId: 'other-channel',
+    note: 'Wrong place',
   });
 
-  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
-  const embed = buildScoutEmbed(call, [pledge]);
-  const fields = Object.fromEntries(embed.data.fields.map(field => [field.name, field.value]));
-  assert.equal(fields['Committed scouts'], '0');
+  await handleScoutReportModal(interaction);
 
-  const reportsField = embed.data.fields.find(field => field.name.startsWith('Reports'));
-  assert.match(reportsField.value, /commitment:75 scouts found/);
-  assert.doesNotMatch(reportsField.value, /\{"kind":"scout_report"/);
-  assert.equal(interaction._calls.some(callEntry => callEntry[0] === 'editMessage'), true);
+  assert.equal(prepare('SELECT COUNT(*) AS count FROM pledges WHERE call_id = ?').get(callId).count, 0);
+  const reply = interaction._calls.find(callEntry => callEntry[0] === 'reply')[1];
+  assert.equal(reply.ephemeral, true);
+  assert.match(reply.content, /temporary scout channel/i);
+  const message = fakeScoutReportMessage({ client: interaction.client });
+  assert.equal(await handleScoutReportMessage(message, 1_700_000_000), false);
+});
+
+test('handleScoutReportModal reports existing archive link when already archived', async () => {
+  await setupTestDb();
+  resetTables();
+  clearPendingScoutReportUploads();
+  const callId = insertScoutCall({ payload: { guildId: 'guild-1' } });
+  prepare(`
+    UPDATE scout_reports
+    SET archive_channel_id = ?, archive_message_id = ?, reported_at = ?
+    WHERE call_id = ?
+  `).run('archive-channel', 'archive-message-1', 1_700_000_000, callId);
+  const interaction = fakeScoutReportModalInteraction({ callId, note: 'Another report' });
+
+  await handleScoutReportModal(interaction);
+
+  const reply = interaction._calls.find(callEntry => callEntry[0] === 'reply')[1];
+  assert.equal(reply.ephemeral, true);
+  assert.match(reply.content, /already archived/i);
+  assert.match(reply.content, /https:\/\/discord\.com\/channels\/guild-1\/archive-channel\/archive-message-1/);
+  assert.doesNotMatch(reply.content, /channels\/@me\//);
+});
+
+test('handleScoutReportModal reports archive link for closed archived calls', async () => {
+  await setupTestDb();
+  resetTables();
+  clearPendingScoutReportUploads();
+  const callId = insertScoutCall({ status: 'closed', payload: { guildId: 'guild-1' } });
+  prepare(`
+    UPDATE scout_reports
+    SET archive_channel_id = ?, archive_message_id = ?, reported_at = ?
+    WHERE call_id = ?
+  `).run('archive-channel', 'archive-message-1', 1_700_000_000, callId);
+  const interaction = fakeScoutReportModalInteraction({ callId, note: 'Another report' });
+
+  await handleScoutReportModal(interaction);
+
+  const reply = interaction._calls.find(callEntry => callEntry[0] === 'reply')[1];
+  assert.equal(reply.ephemeral, true);
+  assert.match(reply.content, /already archived/i);
+  assert.match(reply.content, /https:\/\/discord\.com\/channels\/guild-1\/archive-channel\/archive-message-1/);
+  assert.doesNotMatch(reply.content, /channels\/@me\//);
 });
 
 test('router dispatches scout join submission modals to handleScoutJoinModal', async () => {

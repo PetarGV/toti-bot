@@ -13,7 +13,6 @@ import {
   decodeScoutCommitmentAmount,
   decodeScoutReportText,
   encodeScoutCommitmentAmount,
-  encodeScoutReportText,
   generateScoutCode,
   isScoutCommitment,
   parseScoutCommitmentAmount,
@@ -21,6 +20,7 @@ import {
 import { registerRenderer } from './calls.js';
 import { notifyAuthorOfPledge, notifyAuthorIfMilestone } from './notify.js';
 import { getHomeCoordsString } from './profile.js';
+import { startPendingScoutReportUpload } from './scoutReportUpload.js';
 
 // ── Button entry: call:scout ──────────────────────────────────────────────────
 export async function handleScoutButton(interaction) {
@@ -71,6 +71,14 @@ function getOptionalTextInputValue(fields, customId) {
     return fields.getTextInputValue(customId) || null;
   } catch {
     return null;
+  }
+}
+
+function parseCallPayload(call) {
+  try {
+    return JSON.parse(call?.payload || '{}');
+  } catch {
+    return {};
   }
 }
 
@@ -269,11 +277,11 @@ export async function handleScoutReportButton(interaction) {
     .setTitle('Submit Scout Report');
 
   const reportInput = new TextInputBuilder()
-    .setCustomId('report')
-    .setLabel('Scout report')
+    .setCustomId('note')
+    .setLabel('Report note (optional)')
     .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
-    .setMaxLength(1000);
+    .setRequired(false)
+    .setMaxLength(500);
 
   modal.addComponents(new ActionRowBuilder().addComponents(reportInput));
   await interaction.showModal(modal);
@@ -301,39 +309,46 @@ export async function handleScoutCloseButton(interaction) {
 export async function handleScoutReportModal(interaction) {
   const callId = parseInt(interaction.customId.split(':')[2], 10);
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
-  if (!call || call.status !== 'open') {
+  if (!call) {
     return interaction.reply({ content: 'This scout request is no longer open.', ephemeral: true });
   }
 
-  const report = interaction.fields.getTextInputValue('report').trim();
-  if (!report) {
-    return interaction.reply({ content: '❌ Report cannot be empty.', ephemeral: true });
+  const reportRow = prepare('SELECT * FROM scout_reports WHERE call_id = ?').get(callId);
+  if (reportRow?.reported_at || reportRow?.archive_message_id) {
+    const payload = parseCallPayload(call);
+    const guildId = interaction.guildId || payload.guildId || null;
+    const archiveLink = reportRow.archive_channel_id && reportRow.archive_message_id
+      ? guildId
+        ? `https://discord.com/channels/${guildId}/${reportRow.archive_channel_id}/${reportRow.archive_message_id}`
+        : `<#${reportRow.archive_channel_id}>`
+      : 'the scout report archive';
+    return interaction.reply({ content: `This scout report is already archived: ${archiveLink}`, ephemeral: true });
   }
 
-  const storedReport = encodeScoutReportText(report);
-  const existing = prepare('SELECT id FROM pledges WHERE call_id = ? AND user_id = ?')
-    .get(callId, interaction.user.id);
-
-  if (existing) {
-    prepare('UPDATE pledges SET amount = ? WHERE call_id = ? AND user_id = ?')
-      .run(storedReport, callId, interaction.user.id);
-  } else {
-    prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
-      .run(callId, interaction.user.id, storedReport);
-    inc('pledgesSubmitted');
+  if (call.status !== 'open') {
+    return interaction.reply({ content: 'This scout request is no longer open.', ephemeral: true });
   }
 
-  const { refreshCall } = await import('./calls.js');
-  await refreshCall(interaction.client, callId);
-  await interaction.reply({ content: '✅ Scout report submitted.', ephemeral: true });
+  if (interaction.channelId !== call.channel_id) {
+    return interaction.reply({ content: 'Submit scout reports from the temporary scout channel.', ephemeral: true });
+  }
 
-  notifyAuthorOfPledge(interaction.client, callId, interaction.user.id, 'report').catch(err => logger.warn('notify pledge:', err.message));
-  notifyAuthorIfMilestone(interaction.client, callId).catch(err => logger.warn('notify milestone:', err.message));
+  const note = getOptionalTextInputValue(interaction.fields, 'note');
+  startPendingScoutReportUpload({
+    callId,
+    userId: interaction.user.id,
+    channelId: interaction.channelId,
+    note,
+  });
+  return interaction.reply({
+    content: 'Upload exactly one screenshot in this channel within 10 minutes to archive the scout report.',
+    ephemeral: true,
+  });
 }
 
 // ── Embed builder ─────────────────────────────────────────────────────────────
 export function buildScoutEmbed(call, pledges) {
-  const payload = JSON.parse(call.payload || '{}');
+  const payload = parseCallPayload(call);
 
   let statusPrefix = '';
   let color = 0x3498db;
