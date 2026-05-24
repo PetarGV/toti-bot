@@ -96,6 +96,7 @@ async function createScoutCall(interaction, { x, y, notes, minScouts }) {
     guildId,
   });
   let callId = null;
+  let published = false;
 
   try {
     const result = prepare(`
@@ -121,10 +122,9 @@ async function createScoutCall(interaction, { x, y, notes, minScouts }) {
     });
 
     prepare('UPDATE calls SET message_id = ? WHERE id = ?').run(msg.id, callId);
-
-    await interaction.editReply({ content: `Scout request created: <#${tempChannel.id}>` });
+    published = true;
   } catch (err) {
-    if (callId != null) {
+    if (!published && callId != null) {
       try {
         prepare('DELETE FROM scout_reports WHERE call_id = ?').run(callId);
       } catch (cleanupErr) {
@@ -137,7 +137,7 @@ async function createScoutCall(interaction, { x, y, notes, minScouts }) {
       }
     }
 
-    if (typeof tempChannel?.delete === 'function') {
+    if (!published && typeof tempChannel?.delete === 'function') {
       try {
         await tempChannel.delete();
       } catch (cleanupErr) {
@@ -147,6 +147,8 @@ async function createScoutCall(interaction, { x, y, notes, minScouts }) {
 
     throw err;
   }
+
+  await interaction.editReply({ content: `Scout request created: <#${tempChannel.id}>` });
 }
 
 // ── Modal submit: scout:create ────────────────────────────────────────────────

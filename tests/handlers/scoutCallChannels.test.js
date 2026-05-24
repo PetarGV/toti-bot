@@ -74,6 +74,16 @@ function fakeScoutInteraction(guild) {
   };
 }
 
+function fakeScoutInteractionWithReplyError(guild) {
+  const interaction = fakeScoutInteraction(guild);
+  interaction.editReply = async function editReply(payload) {
+    this._calls.push(['editReply', payload]);
+    this.replied = true;
+    throw new Error('reply failed');
+  };
+  return interaction;
+}
+
 test('scout command creates temp channel and stores scout report metadata', async () => {
   await setupTestDb();
   resetTables();
@@ -116,6 +126,27 @@ test('scout command cleans up rows and temp channel when temp channel send fails
 
   const tempChannel = guild._channels.find(channel => /^scout-[a-z0-9]{4}-/.test(channel.name));
   assert.equal(tempChannel?.deleted, true);
+});
+
+test('scout command keeps published request when source reply update fails', async () => {
+  await setupTestDb();
+  resetTables();
+  prepare('INSERT INTO x_world (id, x, y, player, alliance) VALUES (?, ?, ?, ?, ?)')
+    .run(1, -50, 72, 'Enemy Name', 'BAD');
+
+  const guild = fakeGuild();
+  const interaction = fakeScoutInteractionWithReplyError(guild);
+
+  await assert.rejects(handleScoutCommand(interaction), /reply failed/);
+
+  const call = prepare('SELECT * FROM calls').get();
+  assert.ok(call);
+  const report = prepare('SELECT * FROM scout_reports WHERE call_id = ?').get(call.id);
+  const tempChannel = guild._channels.find(channel => channel.id === call.channel_id);
+
+  assert.ok(report);
+  assert.equal(call.message_id, 'scout-message-1');
+  assert.equal(tempChannel?.deleted, false);
 });
 
 test('buildScoutEmbed prefers stored target snapshot over current x_world row', async () => {
