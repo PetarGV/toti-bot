@@ -73,7 +73,7 @@ Request scouting and lookup village info from cached map data.
 ### Slash commands
 | Command | Args | Description |
 |---|---|---|
-| `/scout` | `coords` `[notes]` | Request a scout |
+| `/scout` | `coords` `[notes]` `[min-scouts]` | Request a scout |
 | `/whois` | `coords` | Lookup village owner / alliance / population |
 | `/nearby` | `coords` `[radius]` `[limit]` | Show nearby villages from cached map data |
 
@@ -87,10 +87,28 @@ Request scouting and lookup village info from cached map data.
 ### Action buttons (on each scout embed)
 | Button | Who | Action |
 |---|---|---|
-| 👀 On it | Anyone | Toggle "I'm scouting" commitment |
-| 📝 Submit Report | Anyone | Paste scout report inline |
+| 👀 On it | Anyone | Enter how many scouts you can send |
+| 📝 Submit Report | Anyone | Start a 10-minute screenshot upload window |
 | 🔒 Close | Author or admin | Close the scout request |
 | 🗺️ Map | Anyone | Open Travian map at coords |
+
+### Scout request channels
+
+Scout requests are designed to run from the pinned Scout panel, with slash commands kept as an admin/keyboard backup.
+
+When a scout request is created, the bot creates a temporary channel under the **Scouting** category. The channel name uses:
+
+```text
+scout-<code>-x<X>-y<Y>-<player>
+```
+
+Example: `scout-a3f9-x50-y72-enemyname`.
+
+The temporary channel contains the usual scout embed and buttons: **On it**, **Submit Report**, **Close**, and **Map**. Members can chat there normally and paste screenshots or notes while coordinating. Those messages are not archived automatically.
+
+To submit the official report, click **Submit Report**, optionally add a note, then upload exactly one PNG, JPG, or WEBP screenshot in that scout channel within 10 minutes. The bot posts that screenshot permanently to `#scout-reports`, updates the scout embed with the archive link, and schedules the temporary channel for deletion 24 hours after the report is submitted.
+
+Only one official screenshot report is accepted per scout request for now. Closing an unreported scout request does not delete the temporary channel.
 
 ---
 
@@ -170,7 +188,7 @@ All admin commands require Administrator permission.
 |---|---|---|
 | `/setup defense` | — | Post + pin the **Defense** panel (Defense Call, Reinforce, URGENT) |
 | `/setup offense` | — | Post + pin the **Offense** panel (Offense Call, Whois) |
-| `/setup scout` | — | Post + pin the **Scout** panel (Scout Request, Whois, Report) |
+| `/setup scout` | — | Prepare **Scouting** + `#scout-reports`, then post + pin the **Scout** panel |
 | `/setup resources` | — | Post + pin the **Resources** panel (push buttons) |
 | `/setup general` | — | Post + pin the **General** panel (Status, Calls, Profile, Nearby Map) |
 | `/setup roles` | — | Post + pin the **Crew Role** selection panel |
@@ -257,6 +275,7 @@ Run automatically — no user action needed.
 | Map fetch | `0 6 * * *` (06:00 daily) | Pulls `map.sql` from Travian, parses, refreshes `x_world` |
 | Call expiry | `*/5 * * * *` (every 5 min) | Marks open calls past deadline as `expired`, refreshes embeds |
 | Timer ticks | `*/10 * * * * *` (every 10 sec) | Fires due timers, auto-deletes the message after 30s |
+| Scout report cleanup | `*/10 * * * *` (every 10 min) | Deletes reported temporary scout channels 24h after official report submission |
 | Backup | `0 3 * * *` (03:00 daily) | Copies `data/travian.db` to `data/backups/`, retains last 7 |
 | Log rotation | At first log call past midnight | Renames yesterday's log to `bot-YYYY-MM-DD.log`, keeps last 14 days |
 

@@ -7,7 +7,7 @@ Discord bot for Travian T4.6 alliance coordination. Pinned button panels for res
 - **Pinned panels per channel** — separate panels for defense / offense / scout / resources / general
 - **Resource push** — pledge tracking, progress bars, auto-fill on delivery
 - **Combat calls** — defense, offense, reinforce, urgent (`@def-crew` ping), responder tally, auto-expiry on arrival
-- **Scout requests** — inline reports visible to channel
+- **Scout requests** — dedicated coordination channels, one official screenshot archive, 24h cleanup after report submission
 - **map.sql integration** - daily fetch, `/whois <coords>` lookup, and nearby village intel from cached map data
 - **Discord/member map sync** - admin scan matches Discord display names to Travian players while ignoring case and symbols
 - **User profiles** — IGN, home coords, tribe, opt-in DM notifications, auto-fill in modals
