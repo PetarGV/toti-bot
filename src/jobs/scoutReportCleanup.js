@@ -41,7 +41,15 @@ export async function cleanupDueScoutReportChannels(client, now = unixNow()) {
       }
 
       if (channel?.delete) {
-        await channel.delete(DELETE_REASON);
+        try {
+          await channel.delete(DELETE_REASON);
+        } catch (err) {
+          if (isNotFoundError(err)) {
+            markTempChannelDeleted(report.call_id, now);
+            continue;
+          }
+          throw err;
+        }
       }
 
       markTempChannelDeleted(report.call_id, now);
@@ -52,6 +60,9 @@ export async function cleanupDueScoutReportChannels(client, now = unixNow()) {
 }
 
 export function startScoutReportCleanupJob(client) {
-  cron.schedule('*/10 * * * *', () => cleanupDueScoutReportChannels(client));
+  cron.schedule('*/10 * * * *', () => {
+    cleanupDueScoutReportChannels(client)
+      .catch(err => logger.warn('Scout report cleanup job failed:', err.message));
+  });
   logger.info('Scout report cleanup job scheduled every 10 minutes');
 }

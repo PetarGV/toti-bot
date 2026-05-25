@@ -172,3 +172,25 @@ test('cleanupDueScoutReportChannels does not mark deleted when channel deletion 
   const report = prepare('SELECT temp_deleted_at FROM scout_reports WHERE call_id = ?').get(callId);
   assert.equal(report.temp_deleted_at, null);
 });
+
+test('cleanupDueScoutReportChannels marks deleted when channel disappears during delete', async () => {
+  const now = 1_700_000_000;
+  const callId = insertScoutReport({
+    tempChannelId: 'delete-not-found-channel',
+    reportedAt: now - 100,
+    deleteAfter: now - 1,
+  });
+  const notFound = new Error('Unknown Channel');
+  notFound.code = 10003;
+  const channel = {
+    async delete() {
+      throw notFound;
+    },
+  };
+  const client = fakeClient({ channelsById: { 'delete-not-found-channel': channel } });
+
+  await cleanupDueScoutReportChannels(client, now);
+
+  const report = prepare('SELECT temp_deleted_at FROM scout_reports WHERE call_id = ?').get(callId);
+  assert.equal(report.temp_deleted_at, now);
+});

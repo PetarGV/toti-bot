@@ -94,7 +94,7 @@ Request scouting and lookup village info from cached map data.
 
 ### Scout request channels
 
-Scout requests are designed to run from the pinned Scout panel, with slash commands kept as an admin/keyboard backup.
+Scout requests are designed to run from the pinned Scout panel, with slash commands kept as a keyboard backup.
 
 When a scout request is created, the bot creates a temporary channel under the **Scouting** category. The channel name uses:
 
