@@ -164,7 +164,8 @@ export const commandDefinitions = [
     .setName('scout')
     .setDescription('Request a scout on a village')
     .addStringOption(o => o.setName('coords').setDescription('Target coords').setRequired(true))
-    .addStringOption(o => o.setName('notes').setDescription('What to look for')),
+    .addStringOption(o => o.setName('notes').setDescription('What to look for'))
+    .addStringOption(o => o.setName('min-scouts').setDescription('Minimum scouts needed, e.g. 50, 200, 500+')),
 
   new SlashCommandBuilder()
     .setName('reinforce')
