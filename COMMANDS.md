@@ -82,7 +82,7 @@ Request scouting and lookup village info from cached map data.
 |---|---|
 | 👀 Scout Request | Open scout modal |
 | 🔍 Whois Lookup | Open whois modal |
-| 📍 Report Sighting | (placeholder, not implemented) |
+| 📍 Report Sighting | Submit the official screenshot from inside a scout request channel |
 
 ### Action buttons (on each scout embed)
 | Button | Who | Action |
@@ -106,7 +106,7 @@ Example: `scout-a3f9-x50-y72-enemyname`.
 
 The temporary channel contains the usual scout embed and buttons: **On it**, **Submit Report**, **Close**, and **Map**. Members can chat there normally and paste screenshots or notes while coordinating. Those messages are not archived automatically.
 
-To submit the official report, click **Submit Report**, optionally add a note, then upload exactly one PNG, JPG, or WEBP screenshot in that scout channel within 10 minutes. The bot posts that screenshot permanently to `#scout-reports`, updates the scout embed with the archive link, and schedules the temporary channel for deletion 24 hours after the report is submitted.
+To submit the official report, click **Submit Report** on the scout embed or **Report Sighting** from inside that scout request channel, optionally add a note, then upload exactly one PNG, JPG, or WEBP screenshot within 10 minutes. The bot posts that screenshot permanently to `#scout-reports`, updates the scout embed with the archive link, and schedules the temporary channel for deletion 24 hours after the report is submitted.
 
 Only one official screenshot report is accepted per scout request for now. Closing an unreported scout request does not delete the temporary channel.
 

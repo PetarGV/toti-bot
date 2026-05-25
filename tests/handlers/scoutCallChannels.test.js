@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { ChannelType } from 'discord.js';
 import { setupTestDb, resetTables } from '../helpers/testDb.js';
 import { prepare, setConfig } from '../../src/db/client.js';
-import { routeModal } from '../../src/handlers/router.js';
+import { routeButton, routeModal } from '../../src/handlers/router.js';
 import {
   buildScoutEmbed,
   handleScoutCommand,
@@ -209,6 +209,23 @@ function fakeScoutReportModalInteraction({
     async reply(payload) {
       calls.push(['reply', payload]);
       this.replied = true;
+    },
+    _calls: calls,
+  };
+}
+
+function fakeReportSightingButtonInteraction({ channelId = 'channel-1', userId = 'scout-1' } = {}) {
+  const calls = [];
+  return {
+    customId: 'intel:report',
+    user: { id: userId },
+    channelId,
+    async reply(payload) {
+      calls.push(['reply', payload]);
+      this.replied = true;
+    },
+    async showModal(modal) {
+      calls.push(['showModal', modal.toJSON()]);
     },
     _calls: calls,
   };
@@ -653,6 +670,34 @@ test('handleScoutReportModal reports archive link for closed archived calls', as
   assert.match(reply.content, /already archived/i);
   assert.match(reply.content, /https:\/\/discord\.com\/channels\/guild-1\/archive-channel\/archive-message-1/);
   assert.doesNotMatch(reply.content, /channels\/@me\//);
+});
+
+test('router dispatches report sighting button to scout report modal in scout temp channel', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall({ channelId: 'channel-1' });
+  const interaction = fakeReportSightingButtonInteraction({ channelId: 'channel-1' });
+
+  await routeButton(interaction);
+
+  assert.equal(interaction._calls.length, 1);
+  assert.equal(interaction._calls[0][0], 'showModal');
+  const modal = interaction._calls[0][1];
+  assert.equal(modal.custom_id, `scout:report_submit:${callId}`);
+  assert.equal(modal.title, 'Submit Scout Report');
+});
+
+test('report sighting button outside a scout temp channel tells user where to submit', async () => {
+  await setupTestDb();
+  resetTables();
+  insertScoutCall({ channelId: 'channel-1' });
+  const interaction = fakeReportSightingButtonInteraction({ channelId: 'other-channel' });
+
+  await routeButton(interaction);
+
+  const reply = interaction._calls.find(callEntry => callEntry[0] === 'reply')[1];
+  assert.equal(reply.ephemeral, true);
+  assert.match(reply.content, /inside the scout request channel/i);
 });
 
 test('router dispatches scout join submission modals to handleScoutJoinModal', async () => {

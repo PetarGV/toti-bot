@@ -294,6 +294,31 @@ export async function handleScoutReportButton(interaction) {
     return interaction.reply({ content: 'This scout request is no longer open.', ephemeral: true });
   }
 
+  return showScoutReportModal(interaction, callId);
+}
+
+export async function handleScoutReportSightingButton(interaction) {
+  const call = prepare(`
+    SELECT *
+    FROM calls
+    WHERE type = 'scout'
+      AND channel_id = ?
+      AND status = 'open'
+    ORDER BY id DESC
+    LIMIT 1
+  `).get(interaction.channelId);
+
+  if (!call) {
+    return interaction.reply({
+      content: 'Use Report Sighting inside the scout request channel.',
+      ephemeral: true,
+    });
+  }
+
+  return showScoutReportModal(interaction, call.id);
+}
+
+async function showScoutReportModal(interaction, callId) {
   const modal = new ModalBuilder()
     .setCustomId(`scout:report_submit:${callId}`)
     .setTitle('Submit Scout Report');

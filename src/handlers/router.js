@@ -41,6 +41,7 @@ import {
   handleScoutJoinButton,
   handleScoutJoinModal,
   handleScoutReportButton,
+  handleScoutReportSightingButton,
   handleScoutCloseButton,
   handleScoutReportModal,
   handleScoutCommand,
@@ -146,6 +147,7 @@ export async function routeButton(interaction) {
 
     // Specific single-id buttons first
     if (id === 'intel:whois') return await handleWhoisButton(interaction);
+    if (id === 'intel:report') return await handleScoutReportSightingButton(interaction);
     if (id === 'general:nearby') return await handleNearbyButton(interaction);
 
     if (ns === 'push') {
@@ -194,9 +196,6 @@ export async function routeButton(interaction) {
       if (action === 'stop')   return await handleTimerPanelStop(interaction);
       if (action === 'status') return await handleTimerPanelStatus(interaction);
     }
-
-    // Remaining unimplemented
-    if (id === 'intel:report') return await notImplemented(interaction);
 
     return await interaction.reply({ content: 'Unknown button.', ephemeral: true });
   } catch (err) {
