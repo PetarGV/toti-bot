@@ -6,6 +6,7 @@ import {
 import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl } from '../utils/travianUrl.js';
+import { discordTimestamp } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { ensureScoutInfrastructure, createScoutTempChannel } from '../utils/scoutChannels.js';
@@ -80,6 +81,27 @@ function parseCallPayload(call) {
   } catch {
     return {};
   }
+}
+
+function formatArchivedScoutReport(reportRow, guildId) {
+  const lines = [];
+  if (reportRow.reporter_id) {
+    lines.push(`Reporter: <@${reportRow.reporter_id}>`);
+  }
+  if (reportRow.reported_at) {
+    lines.push(`Submitted: ${discordTimestamp(reportRow.reported_at, 'R')}`);
+  }
+  if (reportRow.archive_channel_id && reportRow.archive_message_id && guildId) {
+    lines.push(`Archive: https://discord.com/channels/${guildId}/${reportRow.archive_channel_id}/${reportRow.archive_message_id}`);
+  } else if (reportRow.archive_message_id) {
+    lines.push(`Archive message: ${reportRow.archive_message_id}`);
+  } else if (reportRow.archive_channel_id) {
+    lines.push(`Archive: <#${reportRow.archive_channel_id}>`);
+  }
+  if (reportRow.delete_after) {
+    lines.push(`Temp channel deletes ${discordTimestamp(reportRow.delete_after, 'R')}`);
+  }
+  return lines.join('\n');
 }
 
 async function createScoutCall(interaction, { x, y, notes, minScouts }) {
@@ -418,6 +440,16 @@ export function buildScoutEmbed(call, pledges) {
     }).join('\n\n');
     embed.addFields({ name: `Reports (${reports.length})`, value: reportBlocks, inline: false });
   }
+
+  const reportRow = prepare('SELECT * FROM scout_reports WHERE call_id = ?').get(call.id);
+  const archivedReport = reportRow?.archive_channel_id || reportRow?.archive_message_id;
+  embed.addFields({
+    name: 'Report',
+    value: archivedReport
+      ? formatArchivedScoutReport(reportRow, payload.guildId || null)
+      : '*No official report yet*',
+    inline: false,
+  });
 
   embed.setFooter({ text: `Call ID: ${call.id}` }).setTimestamp();
 

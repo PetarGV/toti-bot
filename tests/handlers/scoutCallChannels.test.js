@@ -421,6 +421,76 @@ test('buildScoutEmbed treats raw commitment-looking text as a scout report', asy
   assert.match(reportsField.value, /commitment:75 scouts found/);
 });
 
+test('buildScoutEmbed shows archived report state and delete time', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall({
+    scoutCode: 'a3f9',
+    payload: { scoutCode: 'a3f9', guildId: 'guild-1' },
+  });
+  prepare(`
+    UPDATE scout_reports
+    SET archive_channel_id = ?,
+        archive_message_id = ?,
+        reporter_id = ?,
+        reported_at = ?,
+        delete_after = ?
+    WHERE call_id = ?
+  `).run('archive-channel', 'archive-message-1', 'scout-1', 1_700_000_000, 1_700_086_400, callId);
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+
+  const embed = buildScoutEmbed(call, []);
+
+  const reportField = embed.data.fields.find(field => field.name === 'Report');
+  assert.ok(reportField);
+  assert.match(reportField.value, /<@scout-1>/);
+  assert.match(reportField.value, /<t:1700000000:R>/);
+  assert.match(reportField.value, /https:\/\/discord\.com\/channels\/guild-1\/archive-channel\/archive-message-1/);
+  assert.match(reportField.value, /Temp channel deletes <t:1700086400:R>/);
+});
+
+test('buildScoutEmbed shows empty official report state when no archive exists', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall({
+    scoutCode: 'a3f9',
+    payload: { scoutCode: 'a3f9', guildId: 'guild-1' },
+  });
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+
+  const embed = buildScoutEmbed(call, []);
+
+  const reportField = embed.data.fields.find(field => field.name === 'Report');
+  assert.ok(reportField);
+  assert.match(reportField.value, /No official report yet/i);
+});
+
+test('buildScoutEmbed renders report state for closed archived calls', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = insertScoutCall({
+    status: 'closed',
+    scoutCode: 'a3f9',
+    payload: { scoutCode: 'a3f9', guildId: 'guild-1' },
+  });
+  prepare(`
+    UPDATE scout_reports
+    SET archive_channel_id = ?,
+        archive_message_id = ?,
+        reporter_id = ?,
+        reported_at = ?
+    WHERE call_id = ?
+  `).run('archive-channel', 'archive-message-1', 'scout-1', 1_700_000_000, callId);
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+
+  const embed = buildScoutEmbed(call, []);
+
+  const reportField = embed.data.fields.find(field => field.name === 'Report');
+  assert.ok(reportField);
+  assert.match(reportField.value, /<@scout-1>/);
+  assert.match(reportField.value, /https:\/\/discord\.com\/channels\/guild-1\/archive-channel\/archive-message-1/);
+});
+
 test('handleScoutJoinButton opens amount modal instead of toggling immediately', async () => {
   await setupTestDb();
   resetTables();
