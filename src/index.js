@@ -8,6 +8,7 @@ import { initDb, prepare, flushDb, getConfig } from './db/client.js';
 import { restorePanels } from './panel/deploy.js';
 import { startMapFetchJob, fetchMapWithRetry } from './jobs/mapFetch.js';
 import { startExpiryJob } from './jobs/expiry.js';
+import { startScoutReportCleanupJob } from './jobs/scoutReportCleanup.js';
 import { startBackupJob } from './jobs/backup.js';
 import { startTimerTickJob } from './jobs/timerTick.js';
 import { startMemberSyncJob, runMemberSync } from './jobs/memberSync.js';
@@ -52,6 +53,7 @@ client.once('clientReady', async () => {
   logger.info(`Restored ${openCount.c} active calls.`);
   startMapFetchJob(client);
   startExpiryJob(client);
+  startScoutReportCleanupJob(client);
   startBackupJob(client);
   startTimerTickJob(client);
   startMemberSyncJob(client);
