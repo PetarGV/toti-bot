@@ -92,6 +92,9 @@ import {
   handleSendDefAddButton,
   handleSendDefSubmitModal,
   handleSendDefAddSubmitModal,
+  handleEscalateActiveButton,
+  handleEscalatePermaButton,
+  handleDefCallFromReportModal,
 } from './defCalls.js';
 
 async function notImplemented(interaction) {
@@ -176,11 +179,13 @@ export async function routeButton(interaction) {
     }
 
     if (ns === 'report') {
-      if (action === 'choose')     return await handleReportChooseButton(interaction);
-      if (action === 'manual')     return await handleReportManualButton(interaction);
-      if (action === 'paste')      return await handleReportPasteButton(interaction);
-      if (action === 'reclassify') return await handleReclassifyButton(interaction);
-      if (action === 'close')      return await handleReportCloseButton(interaction);
+      if (action === 'choose')          return await handleReportChooseButton(interaction);
+      if (action === 'manual')          return await handleReportManualButton(interaction);
+      if (action === 'paste')           return await handleReportPasteButton(interaction);
+      if (action === 'reclassify')      return await handleReclassifyButton(interaction);
+      if (action === 'close')           return await handleReportCloseButton(interaction);
+      if (action === 'escalate_active') return await handleEscalateActiveButton(interaction);
+      if (action === 'escalate_perma')  return await handleEscalatePermaButton(interaction);
     }
 
     if (ns === 'call') {
@@ -262,6 +267,7 @@ export async function routeModal(interaction) {
     if (id === 'nearby:lookup')                 return await handleNearbyModalSubmit(interaction);
     if (id.startsWith('push:create:'))          return await handlePushCreateModal(interaction);
     if (id.startsWith('pledge:submit:'))        return await handlePledgeSubmitModal(interaction);
+    if (id.startsWith('combat:create_def_from_report:')) return await handleDefCallFromReportModal(interaction);
     if (id.startsWith('combat:create_def:'))        return await handleDefCallCreateModal(interaction);
     if (id.startsWith('combat:send_def_submit:'))   return await handleSendDefSubmitModal(interaction);
     if (id.startsWith('combat:send_def_add_submit:')) return await handleSendDefAddSubmitModal(interaction);

@@ -6,11 +6,11 @@ import {
 import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl, rallyUrl } from '../utils/travianUrl.js';
-import { discordTimestamp, parseDeadline } from '../utils/time.js';
+import { discordTimestamp, formatDeadline, parseDeadline } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getDefRoleMention } from '../utils/role.js';
-import { defValue } from '../utils/defMath.js';
+import { avgWaveGapSec, defValue } from '../utils/defMath.js';
 import { isLeadershipOrCoord } from '../utils/tier.js';
 import { registerRenderer, refreshCall } from './calls.js';
 import { COMBAT_CONFIG } from './combat.js';
@@ -360,4 +360,87 @@ async function postLeadershipArchive(interaction, callId) {
   } catch (err) {
     logger.warn('leadership archive post failed:', err.message);
   }
+}
+
+export async function handleEscalateActiveButton(interaction) {
+  return showEscalateModal(interaction, 'def_active', interaction.customId.split(':')[2]);
+}
+
+export async function handleEscalatePermaButton(interaction) {
+  return showEscalateModal(interaction, 'def_perma', interaction.customId.split(':')[2]);
+}
+
+async function showEscalateModal(interaction, type, reportId) {
+  if (!isLeadershipOrCoord(interaction.member)) {
+    return interaction.reply({ content: 'вќЊ Leadership / Def Coord only.', ephemeral: true });
+  }
+
+  const report = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
+  if (!report) return interaction.reply({ content: 'Report not found.', ephemeral: true });
+
+  const config = COMBAT_CONFIG[type];
+  if (!config) return interaction.reply({ content: 'вќЊ Unknown call type.', ephemeral: true });
+
+  const modal = new ModalBuilder()
+    .setCustomId(`combat:create_def_from_report:${type}:${reportId}`)
+    .setTitle(`${config.label} (from #${reportId})`);
+
+  const coords = new TextInputBuilder()
+    .setCustomId('coords')
+    .setLabel('Defender coordinates')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setValue(formatCoords(report.defender_x, report.defender_y))
+    .setMaxLength(20);
+  modal.addComponents(new ActionRowBuilder().addComponents(coords));
+
+  if (!config.noDeadline) {
+    const arrival = new TextInputBuilder()
+      .setCustomId('arrival')
+      .setLabel('Impact time (UTC)')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true)
+      .setValue(formatDeadline(report.first_eta))
+      .setMaxLength(30);
+    modal.addComponents(new ActionRowBuilder().addComponents(arrival));
+  }
+
+  const troops = new TextInputBuilder()
+    .setCustomId('troops_needed')
+    .setLabel('Troops needed (def value)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('e.g. 15000')
+    .setMaxLength(10);
+  modal.addComponents(new ActionRowBuilder().addComponents(troops));
+
+  const gap = avgWaveGapSec(report.wave_spread_sec, report.waves);
+  const inbetweenMin = Number(prepare('SELECT value FROM config WHERE key=?').get('inbetween_min_gap_sec')?.value ?? '1');
+  let notesPrefill = '';
+  if (gap != null && gap >= inbetweenMin) {
+    notesPrefill = `Wave gap ~${gap.toFixed(1)}s - in-between def possible`;
+  }
+
+  const notes = new TextInputBuilder()
+    .setCustomId('notes')
+    .setLabel('Notes')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(false)
+    .setMaxLength(500);
+  if (notesPrefill) notes.setValue(notesPrefill);
+  modal.addComponents(new ActionRowBuilder().addComponents(notes));
+
+  return interaction.showModal(modal);
+}
+
+export async function handleDefCallFromReportModal(interaction) {
+  const parts = interaction.customId.split(':');
+  const type = parts[2];
+  const reportId = parseInt(parts[3], 10);
+  const forwarded = Object.create(interaction);
+  Object.defineProperty(forwarded, 'customId', {
+    value: `combat:create_def:${type}`,
+    configurable: true,
+  });
+  return handleDefCallCreateModal(forwarded, reportId);
 }
