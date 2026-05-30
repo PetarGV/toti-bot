@@ -36,6 +36,12 @@ import {
   handleReinforceCommand,
 } from './combat.js';
 import {
+  handleReportChooseButton,
+  handleReportPasteButton,
+  handleReportManualButton,
+  handleReportManualModal,
+} from './incomingReports.js';
+import {
   handleScoutButton,
   handleScoutCreateModal,
   handleScoutJoinButton,
@@ -157,6 +163,12 @@ export async function routeButton(interaction) {
       if (action === 'close')    return await handlePledgeCloseButton(interaction);
     }
 
+    if (ns === 'report') {
+      if (action === 'choose') return await handleReportChooseButton(interaction);
+      if (action === 'manual') return await handleReportManualButton(interaction);
+      if (action === 'paste')  return await handleReportPasteButton(interaction);
+    }
+
     if (ns === 'call') {
       // Panel buttons: call:defense|offense|reinforce|urgent|scout
       if (['defense', 'offense', 'reinforce', 'urgent'].includes(action)) {
@@ -244,6 +256,7 @@ export async function routeModal(interaction) {
     if (id === 'onboard:save-coords') return await handleOnboardSaveCoordsModal(interaction);
     if (id.startsWith('sync:ambig-ign-modal:')) return await handleAmbigIgnModal(interaction);
     if (id === 'timer:custom_submit')           return await handleTimerPanelCustomModal(interaction);
+    if (id === 'report:manual_submit') return await handleReportManualModal(interaction);
     return await notImplemented(interaction);
   } catch (err) {
     logger.error('Modal error [%s]:', id, err);
