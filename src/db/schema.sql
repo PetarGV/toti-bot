@@ -55,6 +55,8 @@ CREATE TABLE IF NOT EXISTS pledges (
   call_id    INTEGER NOT NULL REFERENCES calls(id),
   user_id    TEXT NOT NULL,
   amount     TEXT,
+  inf        INTEGER DEFAULT 0,
+  cav        INTEGER DEFAULT 0,
   created_at INTEGER DEFAULT (unixepoch()),
   UNIQUE(call_id, user_id)
 );
@@ -92,3 +94,26 @@ CREATE INDEX IF NOT EXISTS idx_pledges_call  ON pledges(call_id);
 CREATE INDEX IF NOT EXISTS idx_links_ign     ON user_ign_links(ign);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_links_one_primary
   ON user_ign_links(discord_id) WHERE is_primary = 1;
+
+CREATE TABLE IF NOT EXISTS incoming_reports (
+  id                INTEGER PRIMARY KEY AUTOINCREMENT,
+  reporter_id       TEXT NOT NULL,
+  defender_x        INTEGER NOT NULL,
+  defender_y        INTEGER NOT NULL,
+  attacker_x        INTEGER NOT NULL,
+  attacker_y        INTEGER NOT NULL,
+  first_eta         INTEGER NOT NULL,
+  waves             INTEGER NOT NULL,
+  wave_spread_sec   INTEGER,
+  notes             TEXT,
+  threat_class      TEXT NOT NULL DEFAULT 'unknown',
+  threat_override   TEXT,
+  escalated_call_id INTEGER REFERENCES calls(id),
+  status            TEXT NOT NULL DEFAULT 'open',
+  reports_msg_id    TEXT,
+  created_at        INTEGER DEFAULT (unixepoch())
+);
+
+CREATE INDEX IF NOT EXISTS idx_reports_attacker ON incoming_reports(attacker_x, attacker_y, first_eta);
+CREATE INDEX IF NOT EXISTS idx_reports_defender ON incoming_reports(defender_x, defender_y, first_eta);
+CREATE INDEX IF NOT EXISTS idx_reports_created  ON incoming_reports(created_at);

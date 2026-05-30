@@ -17,6 +17,7 @@ export async function setupTestDb() {
 }
 
 const ALL_TABLES = [
+  'incoming_reports',
   'user_ign_links',
   'travian_accounts',
   'pledges',
@@ -25,7 +26,6 @@ const ALL_TABLES = [
   'timers',
   'x_world',
   'users',
-  'config',
 ];
 
 export function resetTables() {
