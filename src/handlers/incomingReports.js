@@ -11,6 +11,7 @@ import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getHomeCoordsString } from './profile.js';
 import { avgWaveGapSec } from '../utils/defMath.js';
+import { classifyAndPersist, cascadeChiefFrom } from './threat.js';
 
 // Stub for future paste-mode (Section 3 of spec). Returns null until implemented.
 export function parseRallyPointPaste(/* pastedText */) {
@@ -130,7 +131,8 @@ export async function createIncomingReport(interaction, fields) {
   const id = result.lastInsertRowid;
   inc('reportsSubmitted');
 
-  // Phase 2 will replace the line below with classifyAndPersist(id).
+  classifyAndPersist(id);
+  const cascadedIds = cascadeChiefFrom(id);
   const row = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(id);
 
   const channelId = getReportsChannelId();
@@ -153,6 +155,20 @@ export async function createIncomingReport(interaction, fields) {
   prepare('UPDATE incoming_reports SET reports_msg_id = ? WHERE id = ?').run(msg.id, id);
 
   await interaction.reply({ content: `✅ Report #${id} submitted.`, ephemeral: true });
+
+  // Re-render any reports cascaded to 'chief'.
+  for (const cid of cascadedIds) {
+    try {
+      const cr = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(cid);
+      if (!cr?.reports_msg_id) continue;
+      const ch = await interaction.client.channels.fetch(channelId);
+      const m = await ch.messages.fetch(cr.reports_msg_id);
+      await m.edit({ embeds: [buildReportEmbed(cr)], components: buildReportComponents(cr) });
+    } catch (err) {
+      logger.warn(`cascade re-render skipped for report ${cid}:`, err.message);
+    }
+  }
+
   return id;
 }
 
