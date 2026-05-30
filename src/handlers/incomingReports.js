@@ -45,7 +45,10 @@ function xworldLookup(x, y) {
     const r = prepare('SELECT player, alliance FROM x_world WHERE x = ? AND y = ?').get(x, y);
     if (!r?.player) return '';
     return ` — ${r.player}${r.alliance ? ` [${r.alliance}]` : ''}`;
-  } catch { return ''; }
+  } catch (err) {
+    logger.warn(`xworld lookup for (${x}|${y}) failed:`, err.message);
+    return '';
+  }
 }
 
 export function buildReportEmbed(row) {
@@ -63,7 +66,8 @@ export function buildReportEmbed(row) {
 
   const gap = avgWaveGapSec(row.wave_spread_sec, row.waves);
   if (row.wave_spread_sec != null) {
-    let line = `⏱️ ${row.waves} waves over ${row.wave_spread_sec}s (avg gap ~${gap.toFixed(1)}s)`;
+    const gapStr = gap != null ? `avg gap ~${gap.toFixed(1)}s` : 'single wave';
+    let line = `⏱️ ${row.waves} waves over ${row.wave_spread_sec}s (${gapStr})`;
     const inbetweenMin = Number(prepare('SELECT value FROM config WHERE key=?').get('inbetween_min_gap_sec')?.value ?? '1');
     if (gap != null && gap >= inbetweenMin) line += '  🛡️ IN-BETWEEN DEF POSSIBLE';
     else line += ' — no in-between window';
