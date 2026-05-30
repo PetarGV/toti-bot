@@ -17,10 +17,12 @@ import { getHomeCoordsString } from './profile.js';
 
 // ── Type config ──────────────────────────────────────────────────────────────
 export const COMBAT_CONFIG = {
-  defense:   { label: 'Defense Call',   emoji: '🛡️', color: 0xe74c3c, ping: 'def', joinLabel: "I'm sending" },
-  offense:   { label: 'Offense Call',   emoji: '⚔️', color: 0x992d22, ping: null,  joinLabel: 'Joining attack' },
-  reinforce: { label: 'Reinforce',      emoji: '🤝', color: 0xe67e22, ping: 'def', joinLabel: 'Reinforcing' },
-  urgent:    { label: '🚨 URGENT 🚨',   emoji: '🚨', color: 0xff0000, ping: 'all', joinLabel: "I'm sending" },
+  defense:    { label: 'Defense Call',   emoji: '🛡️', color: 0xe74c3c, ping: 'def', joinLabel: "I'm sending" },
+  offense:    { label: 'Offense Call',   emoji: '⚔️', color: 0x992d22, ping: null,  joinLabel: 'Joining attack' },
+  reinforce:  { label: 'Reinforce',      emoji: '🤝', color: 0xe67e22, ping: 'def', joinLabel: 'Reinforcing' },
+  urgent:     { label: '🚨 URGENT 🚨',   emoji: '🚨', color: 0xff0000, ping: 'all', joinLabel: "I'm sending" },
+  def_active: { label: 'Active Defense', emoji: '🛡️', color: 0xe74c3c, ping: 'def', joinLabel: 'Sending Def', structured: true },
+  def_perma:  { label: 'Perma Defense',  emoji: '🛡️', color: 0x3498db, ping: 'def', joinLabel: 'Sending Def', structured: true, noDeadline: true },
 };
 
 // ── Button entry: call:defense|offense|reinforce|urgent ──────────────────────
