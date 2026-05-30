@@ -84,6 +84,15 @@ import {
   handleAmbigIgnModal,
   handleActButton,
 } from './syncResolve.js';
+import {
+  handleDefCallButton,
+  handleDefCallCreateModal,
+  handleSendDefButton,
+  handleSendDefEditButton,
+  handleSendDefAddButton,
+  handleSendDefSubmitModal,
+  handleSendDefAddSubmitModal,
+} from './defCalls.js';
 
 async function notImplemented(interaction) {
   const id = interaction.customId ?? interaction.commandName;
@@ -175,9 +184,11 @@ export async function routeButton(interaction) {
     }
 
     if (ns === 'call') {
-      // Panel buttons: call:defense|offense|reinforce|urgent|scout
       if (['defense', 'offense', 'reinforce', 'urgent'].includes(action)) {
         return await handleCombatButton(interaction);
+      }
+      if (action === 'def_active' || action === 'def_perma') {
+        return await handleDefCallButton(interaction);
       }
       if (action === 'scout') return await handleScoutButton(interaction);
     }
@@ -189,6 +200,9 @@ export async function routeButton(interaction) {
       if (action === 'update')       return await handleCombatUpdateButton(interaction);
       if (action === 'pledge_edit')  return await handleCombatPledgeEditButton(interaction);
       if (action === 'pledge_add')   return await handleCombatPledgeAddButton(interaction);
+      if (action === 'send_def')        return await handleSendDefButton(interaction);
+      if (action === 'send_def_edit')   return await handleSendDefEditButton(interaction);
+      if (action === 'send_def_add')    return await handleSendDefAddButton(interaction);
       if (action === 'pick') {
         // combat:pick:<id>          → entry (open picker UI)
         // combat:pick:<id>:next:... → continue button (open seconds modal)
@@ -248,6 +262,9 @@ export async function routeModal(interaction) {
     if (id === 'nearby:lookup')                 return await handleNearbyModalSubmit(interaction);
     if (id.startsWith('push:create:'))          return await handlePushCreateModal(interaction);
     if (id.startsWith('pledge:submit:'))        return await handlePledgeSubmitModal(interaction);
+    if (id.startsWith('combat:create_def:'))        return await handleDefCallCreateModal(interaction);
+    if (id.startsWith('combat:send_def_submit:'))   return await handleSendDefSubmitModal(interaction);
+    if (id.startsWith('combat:send_def_add_submit:')) return await handleSendDefAddSubmitModal(interaction);
     if (id.startsWith('combat:create:'))        return await handleCombatCreateModal(interaction);
     if (id.startsWith('combat:join_submit:'))        return await handleCombatJoinModal(interaction);
     if (id.startsWith('combat:update_submit:'))      return await handleCombatUpdateModal(interaction);
