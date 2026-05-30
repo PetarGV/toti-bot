@@ -40,6 +40,9 @@ import {
   handleReportPasteButton,
   handleReportManualButton,
   handleReportManualModal,
+  handleReclassifyButton,
+  handleReclassifySelect,
+  handleReportCloseButton,
 } from './incomingReports.js';
 import {
   handleScoutButton,
@@ -164,9 +167,11 @@ export async function routeButton(interaction) {
     }
 
     if (ns === 'report') {
-      if (action === 'choose') return await handleReportChooseButton(interaction);
-      if (action === 'manual') return await handleReportManualButton(interaction);
-      if (action === 'paste')  return await handleReportPasteButton(interaction);
+      if (action === 'choose')     return await handleReportChooseButton(interaction);
+      if (action === 'manual')     return await handleReportManualButton(interaction);
+      if (action === 'paste')      return await handleReportPasteButton(interaction);
+      if (action === 'reclassify') return await handleReclassifyButton(interaction);
+      if (action === 'close')      return await handleReportCloseButton(interaction);
     }
 
     if (ns === 'call') {
@@ -227,6 +232,7 @@ export async function routeSelect(interaction) {
     if (id.startsWith('combat:pick:'))   return await handleCombatPickSelect(interaction);
     if (id.startsWith('sync:pick-conflict:'))     return await handleConflictPickSelect(interaction);
     if (id.startsWith('sync:pick-ambig:'))        return await handleAmbigPickSelect(interaction);
+    if (id.startsWith('report:reclassify_pick:')) return await handleReclassifySelect(interaction);
     return await interaction.reply({ content: 'Unknown selection.', ephemeral: true });
   } catch (err) {
     logger.error('Select error [%s]:', id, err);

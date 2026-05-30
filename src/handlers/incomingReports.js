@@ -2,6 +2,7 @@
 import {
   EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   ModalBuilder, TextInputBuilder, TextInputStyle,
+  StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
 } from 'discord.js';
 import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
@@ -12,6 +13,7 @@ import { inc } from '../utils/metrics.js';
 import { getHomeCoordsString } from './profile.js';
 import { avgWaveGapSec } from '../utils/defMath.js';
 import { classifyAndPersist, cascadeChiefFrom } from './threat.js';
+import { isLeadershipOrCoord } from '../utils/tier.js';
 
 // Stub for future paste-mode (Section 3 of spec). Returns null until implemented.
 export function parseRallyPointPaste(/* pastedText */) {
@@ -239,4 +241,75 @@ export async function handleReportManualModal(interaction) {
   }
 
   await createIncomingReport(interaction, { defender, attacker, firstEta, waves, waveSpreadSec, notes: null });
+}
+
+// ── report:reclassify button ─────────────────────────────────────────────────
+export async function handleReclassifyButton(interaction) {
+  if (!isLeadershipOrCoord(interaction.member)) {
+    return interaction.reply({ content: '❌ Leadership / Def Coord only.', ephemeral: true });
+  }
+  const reportId = interaction.customId.split(':')[2];
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`report:reclassify_pick:${reportId}`)
+    .setPlaceholder('New classification')
+    .addOptions(
+      new StringSelectMenuOptionBuilder().setLabel('🟢 Fake').setValue('fake'),
+      new StringSelectMenuOptionBuilder().setLabel('🟠 Real').setValue('real'),
+      new StringSelectMenuOptionBuilder().setLabel('🔴 Chief').setValue('chief'),
+      new StringSelectMenuOptionBuilder().setLabel('⚙️ Auto (clear override)').setValue('auto'),
+    );
+  await interaction.reply({ components: [new ActionRowBuilder().addComponents(select)], ephemeral: true });
+}
+
+// ── report:reclassify_pick select ────────────────────────────────────────────
+export async function handleReclassifySelect(interaction) {
+  if (!isLeadershipOrCoord(interaction.member)) {
+    return interaction.update({ content: '❌ Leadership / Def Coord only.', components: [] });
+  }
+  const reportId = interaction.customId.split(':')[2];
+  const choice = interaction.values[0];
+
+  if (choice === 'auto') {
+    prepare('UPDATE incoming_reports SET threat_override = NULL WHERE id = ?').run(reportId);
+    classifyAndPersist(reportId);
+  } else {
+    prepare('UPDATE incoming_reports SET threat_override = ? WHERE id = ?').run(choice, reportId);
+  }
+
+  const row = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
+  const channelId = getReportsChannelId();
+  if (row?.reports_msg_id && channelId) {
+    try {
+      const ch = await interaction.client.channels.fetch(channelId);
+      const m = await ch.messages.fetch(row.reports_msg_id);
+      await m.edit({ embeds: [buildReportEmbed(row)], components: buildReportComponents(row) });
+    } catch (err) {
+      logger.warn(`reclassify re-render skipped:`, err.message);
+    }
+  }
+  await interaction.update({ content: `✅ Report #${reportId} reclassified.`, components: [] });
+}
+
+// ── report:close button ──────────────────────────────────────────────────────
+export async function handleReportCloseButton(interaction) {
+  const reportId = interaction.customId.split(':')[2];
+  const row = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
+  if (!row) return interaction.reply({ content: 'Report not found.', ephemeral: true });
+  const isReporter = row.reporter_id === interaction.user.id;
+  if (!isReporter && !isLeadershipOrCoord(interaction.member)) {
+    return interaction.reply({ content: '❌ Only the reporter, Leadership, or Def Coord can close this.', ephemeral: true });
+  }
+  prepare("UPDATE incoming_reports SET status = 'dismissed' WHERE id = ?").run(reportId);
+  const after = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
+  const channelId = getReportsChannelId();
+  if (after?.reports_msg_id && channelId) {
+    try {
+      const ch = await interaction.client.channels.fetch(channelId);
+      const m = await ch.messages.fetch(after.reports_msg_id);
+      await m.edit({ embeds: [buildReportEmbed(after)], components: buildReportComponents(after) });
+    } catch (err) {
+      logger.warn(`report close re-render skipped:`, err.message);
+    }
+  }
+  await interaction.reply({ content: `🔒 Report #${reportId} closed.`, ephemeral: true });
 }
