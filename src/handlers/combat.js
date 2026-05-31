@@ -156,21 +156,6 @@ export async function handleCombatCreateModal(interaction) {
 }
 
 // ── Slash command handlers ───────────────────────────────────────────────────
-export async function handleDefenseCommand(interaction) {
-  const coordsStr  = interaction.options.getString('coords');
-  const arrivalStr = interaction.options.getString('arrival');
-  const attacker   = interaction.options.getString('attacker') || null;
-  const troops     = interaction.options.getString('troops') || null;
-
-  const coords = parseCoords(coordsStr);
-  if (!coords) return interaction.reply({ content: '❌ Invalid coordinates.', ephemeral: true });
-
-  const arrival = parseDeadline(arrivalStr);
-  if (!arrival) return interaction.reply({ content: '❌ Invalid arrival time.', ephemeral: true });
-
-  await createCombatCall(interaction, 'defense', { x: coords.x, y: coords.y, arrival, attacker, troops, notes: null });
-}
-
 export async function handleOffenseCommand(interaction) {
   const coordsStr  = interaction.options.getString('coords');
   const arrivalStr = interaction.options.getString('arrival');
@@ -183,20 +168,6 @@ export async function handleOffenseCommand(interaction) {
   if (!arrival) return interaction.reply({ content: '❌ Invalid arrival time.', ephemeral: true });
 
   await createCombatCall(interaction, 'offense', { x: coords.x, y: coords.y, arrival, attacker: null, troops: null, notes });
-}
-
-export async function handleReinforceCommand(interaction) {
-  const coordsStr  = interaction.options.getString('coords');
-  const arrivalStr = interaction.options.getString('arrival');
-  const notes      = interaction.options.getString('notes') || null;
-
-  const coords = parseCoords(coordsStr);
-  if (!coords) return interaction.reply({ content: '❌ Invalid coordinates.', ephemeral: true });
-
-  const arrival = parseDeadline(arrivalStr);
-  if (!arrival) return interaction.reply({ content: '❌ Invalid arrival time.', ephemeral: true });
-
-  await createCombatCall(interaction, 'reinforce', { x: coords.x, y: coords.y, arrival, attacker: null, troops: null, notes });
 }
 
 // ── Response button handlers ─────────────────────────────────────────────────
