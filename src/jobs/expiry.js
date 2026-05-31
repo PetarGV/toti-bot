@@ -11,8 +11,10 @@ export async function expireCall(client, callId) {
 
 async function expireDueCalls(client) {
   const now = unixNow();
+  // Covers all call types with a deadline (defense, offense, reinforce, urgent, def_active).
+  // def_perma calls have NULL deadline and are intentionally excluded by the IS NOT NULL guard.
   const due = prepare(
-    "SELECT id FROM calls WHERE status = 'open' AND deadline IS NOT NULL AND deadline < ?"
+    "SELECT id FROM calls WHERE status = 'open' AND deadline IS NOT NULL AND deadline < ? AND type != 'def_perma'"
   ).all(now);
 
   for (const row of due) {
