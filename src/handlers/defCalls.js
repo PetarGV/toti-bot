@@ -377,14 +377,14 @@ export async function handleEscalatePermaButton(interaction) {
 
 async function showEscalateModal(interaction, type, reportId) {
   if (!isLeadershipOrCoord(interaction.member)) {
-    return interaction.reply({ content: 'вќЊ Leadership / Def Coord only.', ephemeral: true });
+    return interaction.reply({ content: '❌ Leadership / Def Coord only.', ephemeral: true });
   }
 
   const report = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
   if (!report) return interaction.reply({ content: 'Report not found.', ephemeral: true });
 
   const config = COMBAT_CONFIG[type];
-  if (!config) return interaction.reply({ content: 'вќЊ Unknown call type.', ephemeral: true });
+  if (!config) return interaction.reply({ content: '❌ Unknown call type.', ephemeral: true });
 
   const modal = new ModalBuilder()
     .setCustomId(`combat:create_def_from_report:${type}:${reportId}`)
