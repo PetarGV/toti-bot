@@ -7,7 +7,9 @@ export const commandDefinitions = [
     .setName('setup')
     .setDescription('Post a pinned panel in this channel (admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-    .addSubcommand(s => s.setName('defense').setDescription('Defense operations panel'))
+    .addSubcommand(s => s.setName('reports').setDescription('Incoming attack reports panel'))
+    .addSubcommand(s => s.setName('def-calls').setDescription('Active/Perma Def calls panel (leadership-gated)'))
+    .addSubcommand(s => s.setName('leadership').setDescription('Intel dashboard panel (leadership channel)'))
     .addSubcommand(s => s.setName('offense').setDescription('Offense operations panel'))
     .addSubcommand(s => s.setName('scout').setDescription('Scouting & intel panel'))
     .addSubcommand(s => s.setName('resources').setDescription('Resource push panel'))
@@ -146,12 +148,55 @@ export const commandDefinitions = [
     .addStringOption(o => o.setName('deadline').setDescription('Deadline e.g. 14:30 or "in 2h"')),
 
   new SlashCommandBuilder()
-    .setName('defense')
-    .setDescription('Post a defense call')
-    .addStringOption(o => o.setName('coords').setDescription('Village under attack coords').setRequired(true))
-    .addStringOption(o => o.setName('arrival').setDescription('Attack arrival time e.g. 14:30 or "in 1h30m"').setRequired(true))
-    .addStringOption(o => o.setName('attacker').setDescription('Attacker name / alliance'))
-    .addStringOption(o => o.setName('troops').setDescription('Troops needed (free text, e.g. "5k phalanx")')),
+    .setName('report-incoming')
+    .setDescription('Submit an incoming attack report')
+    .addStringOption(o => o.setName('defender').setDescription('Defender coordinates').setRequired(true))
+    .addStringOption(o => o.setName('attacker').setDescription('Attacker coordinates').setRequired(true))
+    .addStringOption(o => o.setName('first_eta').setDescription('First wave ETA (UTC)').setRequired(true))
+    .addIntegerOption(o => o.setName('waves').setDescription('Number of waves (1-100)').setRequired(true).setMinValue(1).setMaxValue(100))
+    .addIntegerOption(o => o.setName('wave_spread_sec').setDescription('Seconds from first to last wave').setRequired(false).setMinValue(0).setMaxValue(3600))
+    .addStringOption(o => o.setName('notes').setDescription('Notes').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('active-def')
+    .setDescription('Post an Active Def call (leadership only)')
+    .addStringOption(o => o.setName('coords').setDescription('Defender coordinates').setRequired(true))
+    .addIntegerOption(o => o.setName('troops_needed').setDescription('Required def value').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('arrival').setDescription('Impact time (UTC)').setRequired(true))
+    .addStringOption(o => o.setName('notes').setDescription('Notes').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('perma-def')
+    .setDescription('Post a Perma Def call (leadership only)')
+    .addStringOption(o => o.setName('coords').setDescription('Defender coordinates').setRequired(true))
+    .addIntegerOption(o => o.setName('troops_needed').setDescription('Required def value').setRequired(true).setMinValue(1))
+    .addStringOption(o => o.setName('notes').setDescription('Notes').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('sending-def')
+    .setDescription('Pledge inf/cav to a def call')
+    .addIntegerOption(o => o.setName('call').setDescription('Call ID').setRequired(true))
+    .addIntegerOption(o => o.setName('inf').setDescription('Infantry').setRequired(true).setMinValue(0))
+    .addIntegerOption(o => o.setName('cav').setDescription('Cavalry').setRequired(true).setMinValue(0)),
+
+  new SlashCommandBuilder()
+    .setName('intel')
+    .setDescription('Intelligence dashboard / drill-down (leadership only)')
+    .addIntegerOption(o => o.setName('days').setDescription('Widen window to N days (1-30)').setMinValue(1).setMaxValue(30).setRequired(false))
+    .addStringOption(o => o.setName('target').setDescription('Defender coords for drill-down').setRequired(false))
+    .addStringOption(o => o.setName('attacker').setDescription('Attacker coords for drill-down').setRequired(false)),
+
+  new SlashCommandBuilder()
+    .setName('reclassify')
+    .setDescription('Reclassify a report (leadership only)')
+    .addIntegerOption(o => o.setName('report').setDescription('Report ID').setRequired(true))
+    .addStringOption(o => o.setName('as').setDescription('Classification').setRequired(true)
+      .addChoices(
+        { name: 'fake', value: 'fake' },
+        { name: 'real', value: 'real' },
+        { name: 'chief', value: 'chief' },
+        { name: 'auto', value: 'auto' },
+      )),
 
   new SlashCommandBuilder()
     .setName('offense')
@@ -166,13 +211,6 @@ export const commandDefinitions = [
     .addStringOption(o => o.setName('coords').setDescription('Target coords').setRequired(true))
     .addStringOption(o => o.setName('notes').setDescription('What to look for'))
     .addStringOption(o => o.setName('min-scouts').setDescription('Minimum scouts needed, e.g. 50, 200, 500+')),
-
-  new SlashCommandBuilder()
-    .setName('reinforce')
-    .setDescription('Request reinforcements')
-    .addStringOption(o => o.setName('coords').setDescription('Village coords').setRequired(true))
-    .addStringOption(o => o.setName('arrival').setDescription('Needed by time').setRequired(true))
-    .addStringOption(o => o.setName('notes').setDescription('Notes')),
 
   new SlashCommandBuilder()
     .setName('whois')

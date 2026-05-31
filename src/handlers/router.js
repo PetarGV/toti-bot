@@ -31,10 +31,18 @@ import {
   handleCombatPickSelect,
   handleCombatPickContinueButton,
   handleCombatPickModal,
-  handleDefenseCommand,
   handleOffenseCommand,
-  handleReinforceCommand,
 } from './combat.js';
+import {
+  handleReportChooseButton,
+  handleReportPasteButton,
+  handleReportManualButton,
+  handleReportManualModal,
+  handleReclassifyButton,
+  handleReclassifySelect,
+  handleReportCloseButton,
+  handleReportIncomingCommand,
+} from './incomingReports.js';
 import {
   handleScoutButton,
   handleScoutCreateModal,
@@ -76,6 +84,32 @@ import {
   handleAmbigIgnModal,
   handleActButton,
 } from './syncResolve.js';
+import {
+  handleDefCallButton,
+  handleDefCallCreateModal,
+  handleSendDefButton,
+  handleSendDefEditButton,
+  handleSendDefAddButton,
+  handleSendDefSubmitModal,
+  handleSendDefAddSubmitModal,
+  handleEscalateActiveButton,
+  handleEscalatePermaButton,
+  handleDefCallFromReportModal,
+  handleActiveDefCommand,
+  handlePermaDefCommand,
+  handleSendingDefCommand,
+} from './defCalls.js';
+import {
+  handleIntelRefreshButton,
+  handleIntelTargetButton,
+  handleIntelAttackerButton,
+  handleIntelTargetModal,
+  handleIntelAttackerModal,
+  handleIntelWindowButton,
+  handleIntelWindowSelect,
+  handleIntelCommand,
+  handleReclassifyCommand,
+} from './intel.js';
 
 async function notImplemented(interaction) {
   const id = interaction.customId ?? interaction.commandName;
@@ -100,10 +134,14 @@ export async function routeCommand(interaction) {
       case 'admin':     return await handleAdmin(interaction);
       case 'whois':     return await handleWhoisCommand(interaction);
       case 'nearby':    return await handleNearbyCommand(interaction);
-      case 'push':      return await handlePushCommand(interaction);
-      case 'defense':   return await handleDefenseCommand(interaction);
+      case 'push':            return await handlePushCommand(interaction);
+      case 'report-incoming': return await handleReportIncomingCommand(interaction);
+      case 'active-def':      return await handleActiveDefCommand(interaction);
+      case 'perma-def':       return await handlePermaDefCommand(interaction);
+      case 'sending-def':     return await handleSendingDefCommand(interaction);
+      case 'intel':           return await handleIntelCommand(interaction);
+      case 'reclassify':      return await handleReclassifyCommand(interaction);
       case 'offense':   return await handleOffenseCommand(interaction);
-      case 'reinforce': return await handleReinforceCommand(interaction);
       case 'scout':     return await handleScoutCommand(interaction);
       case 'status':   return await handleStatusCommand(interaction);
       case 'calls':    return await handleCallsCommand(interaction);
@@ -158,10 +196,22 @@ export async function routeButton(interaction) {
       if (action === 'close')    return await handlePledgeCloseButton(interaction);
     }
 
+    if (ns === 'report') {
+      if (action === 'choose')          return await handleReportChooseButton(interaction);
+      if (action === 'manual')          return await handleReportManualButton(interaction);
+      if (action === 'paste')           return await handleReportPasteButton(interaction);
+      if (action === 'reclassify')      return await handleReclassifyButton(interaction);
+      if (action === 'close')           return await handleReportCloseButton(interaction);
+      if (action === 'escalate_active') return await handleEscalateActiveButton(interaction);
+      if (action === 'escalate_perma')  return await handleEscalatePermaButton(interaction);
+    }
+
     if (ns === 'call') {
-      // Panel buttons: call:defense|offense|reinforce|urgent|scout
       if (['defense', 'offense', 'reinforce', 'urgent'].includes(action)) {
         return await handleCombatButton(interaction);
+      }
+      if (action === 'def_active' || action === 'def_perma') {
+        return await handleDefCallButton(interaction);
       }
       if (action === 'scout') return await handleScoutButton(interaction);
     }
@@ -173,6 +223,9 @@ export async function routeButton(interaction) {
       if (action === 'update')       return await handleCombatUpdateButton(interaction);
       if (action === 'pledge_edit')  return await handleCombatPledgeEditButton(interaction);
       if (action === 'pledge_add')   return await handleCombatPledgeAddButton(interaction);
+      if (action === 'send_def')        return await handleSendDefButton(interaction);
+      if (action === 'send_def_edit')   return await handleSendDefEditButton(interaction);
+      if (action === 'send_def_add')    return await handleSendDefAddButton(interaction);
       if (action === 'pick') {
         // combat:pick:<id>          → entry (open picker UI)
         // combat:pick:<id>:next:... → continue button (open seconds modal)
@@ -193,6 +246,13 @@ export async function routeButton(interaction) {
       if (action === 'pause')  return await handleTimerPanelPause(interaction);
       if (action === 'stop')   return await handleTimerPanelStop(interaction);
       if (action === 'status') return await handleTimerPanelStatus(interaction);
+    }
+
+    if (ns === 'intel') {
+      if (action === 'refresh')  return await handleIntelRefreshButton(interaction);
+      if (action === 'target')   return await handleIntelTargetButton(interaction);
+      if (action === 'attacker') return await handleIntelAttackerButton(interaction);
+      if (action === 'window')   return await handleIntelWindowButton(interaction);
     }
 
     // Remaining unimplemented
@@ -216,6 +276,8 @@ export async function routeSelect(interaction) {
     if (id.startsWith('combat:pick:'))   return await handleCombatPickSelect(interaction);
     if (id.startsWith('sync:pick-conflict:'))     return await handleConflictPickSelect(interaction);
     if (id.startsWith('sync:pick-ambig:'))        return await handleAmbigPickSelect(interaction);
+    if (id.startsWith('report:reclassify_pick:')) return await handleReclassifySelect(interaction);
+    if (id === 'intel:window_pick') return await handleIntelWindowSelect(interaction);
     return await interaction.reply({ content: 'Unknown selection.', ephemeral: true });
   } catch (err) {
     logger.error('Select error [%s]:', id, err);
@@ -231,6 +293,10 @@ export async function routeModal(interaction) {
     if (id === 'nearby:lookup')                 return await handleNearbyModalSubmit(interaction);
     if (id.startsWith('push:create:'))          return await handlePushCreateModal(interaction);
     if (id.startsWith('pledge:submit:'))        return await handlePledgeSubmitModal(interaction);
+    if (id.startsWith('combat:create_def_from_report:')) return await handleDefCallFromReportModal(interaction);
+    if (id.startsWith('combat:create_def:'))        return await handleDefCallCreateModal(interaction);
+    if (id.startsWith('combat:send_def_submit:'))   return await handleSendDefSubmitModal(interaction);
+    if (id.startsWith('combat:send_def_add_submit:')) return await handleSendDefAddSubmitModal(interaction);
     if (id.startsWith('combat:create:'))        return await handleCombatCreateModal(interaction);
     if (id.startsWith('combat:join_submit:'))        return await handleCombatJoinModal(interaction);
     if (id.startsWith('combat:update_submit:'))      return await handleCombatUpdateModal(interaction);
@@ -246,6 +312,9 @@ export async function routeModal(interaction) {
     if (id === 'onboard:save-coords') return await handleOnboardSaveCoordsModal(interaction);
     if (id.startsWith('sync:ambig-ign-modal:')) return await handleAmbigIgnModal(interaction);
     if (id === 'timer:custom_submit')           return await handleTimerPanelCustomModal(interaction);
+    if (id === 'report:manual_submit') return await handleReportManualModal(interaction);
+    if (id === 'intel:target_submit')   return await handleIntelTargetModal(interaction);
+    if (id === 'intel:attacker_submit') return await handleIntelAttackerModal(interaction);
     return await notImplemented(interaction);
   } catch (err) {
     logger.error('Modal error [%s]:', id, err);

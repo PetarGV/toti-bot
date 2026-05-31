@@ -17,10 +17,12 @@ import { getHomeCoordsString } from './profile.js';
 
 // ── Type config ──────────────────────────────────────────────────────────────
 export const COMBAT_CONFIG = {
-  defense:   { label: 'Defense Call',   emoji: '🛡️', color: 0xe74c3c, ping: 'def', joinLabel: "I'm sending" },
-  offense:   { label: 'Offense Call',   emoji: '⚔️', color: 0x992d22, ping: null,  joinLabel: 'Joining attack' },
-  reinforce: { label: 'Reinforce',      emoji: '🤝', color: 0xe67e22, ping: 'def', joinLabel: 'Reinforcing' },
-  urgent:    { label: '🚨 URGENT 🚨',   emoji: '🚨', color: 0xff0000, ping: 'all', joinLabel: "I'm sending" },
+  defense:    { label: 'Defense Call',   emoji: '🛡️', color: 0xe74c3c, ping: 'def', joinLabel: "I'm sending" },
+  offense:    { label: 'Offense Call',   emoji: '⚔️', color: 0x992d22, ping: null,  joinLabel: 'Joining attack' },
+  reinforce:  { label: 'Reinforce',      emoji: '🤝', color: 0xe67e22, ping: 'def', joinLabel: 'Reinforcing' },
+  urgent:     { label: '🚨 URGENT 🚨',   emoji: '🚨', color: 0xff0000, ping: 'all', joinLabel: "I'm sending" },
+  def_active: { label: 'Active Defense', emoji: '🛡️', color: 0xe74c3c, ping: 'def', joinLabel: 'Sending Def', structured: true },
+  def_perma:  { label: 'Perma Defense',  emoji: '🛡️', color: 0x3498db, ping: 'def', joinLabel: 'Sending Def', structured: true, noDeadline: true },
 };
 
 // ── Button entry: call:defense|offense|reinforce|urgent ──────────────────────
@@ -154,21 +156,6 @@ export async function handleCombatCreateModal(interaction) {
 }
 
 // ── Slash command handlers ───────────────────────────────────────────────────
-export async function handleDefenseCommand(interaction) {
-  const coordsStr  = interaction.options.getString('coords');
-  const arrivalStr = interaction.options.getString('arrival');
-  const attacker   = interaction.options.getString('attacker') || null;
-  const troops     = interaction.options.getString('troops') || null;
-
-  const coords = parseCoords(coordsStr);
-  if (!coords) return interaction.reply({ content: '❌ Invalid coordinates.', ephemeral: true });
-
-  const arrival = parseDeadline(arrivalStr);
-  if (!arrival) return interaction.reply({ content: '❌ Invalid arrival time.', ephemeral: true });
-
-  await createCombatCall(interaction, 'defense', { x: coords.x, y: coords.y, arrival, attacker, troops, notes: null });
-}
-
 export async function handleOffenseCommand(interaction) {
   const coordsStr  = interaction.options.getString('coords');
   const arrivalStr = interaction.options.getString('arrival');
@@ -181,20 +168,6 @@ export async function handleOffenseCommand(interaction) {
   if (!arrival) return interaction.reply({ content: '❌ Invalid arrival time.', ephemeral: true });
 
   await createCombatCall(interaction, 'offense', { x: coords.x, y: coords.y, arrival, attacker: null, troops: null, notes });
-}
-
-export async function handleReinforceCommand(interaction) {
-  const coordsStr  = interaction.options.getString('coords');
-  const arrivalStr = interaction.options.getString('arrival');
-  const notes      = interaction.options.getString('notes') || null;
-
-  const coords = parseCoords(coordsStr);
-  if (!coords) return interaction.reply({ content: '❌ Invalid coordinates.', ephemeral: true });
-
-  const arrival = parseDeadline(arrivalStr);
-  if (!arrival) return interaction.reply({ content: '❌ Invalid arrival time.', ephemeral: true });
-
-  await createCombatCall(interaction, 'reinforce', { x: coords.x, y: coords.y, arrival, attacker: null, troops: null, notes });
 }
 
 // ── Response button handlers ─────────────────────────────────────────────────
