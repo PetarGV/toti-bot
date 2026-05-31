@@ -11,6 +11,7 @@ import { startExpiryJob } from './jobs/expiry.js';
 import { startBackupJob } from './jobs/backup.js';
 import { startTimerTickJob } from './jobs/timerTick.js';
 import { startMemberSyncJob, runMemberSync } from './jobs/memberSync.js';
+import { startIntelDashboardJob } from './jobs/intelDashboard.js';
 import { unixNow } from './utils/time.js';
 import { startHealthServer, stopHealthServer } from './server/health.js';
 import { routeCommand, routeButton, routeModal, routeSelect } from './handlers/router.js';
@@ -54,6 +55,7 @@ client.once('clientReady', async () => {
   startBackupJob(client);
   startTimerTickJob(client);
   startMemberSyncJob(client);
+  startIntelDashboardJob(client);
   catchUpStaleJobs(client).catch(err => logger.error('Startup catch-up failed:', err));
 });
 

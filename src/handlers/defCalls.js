@@ -14,6 +14,7 @@ import { avgWaveGapSec, defValue } from '../utils/defMath.js';
 import { isLeadershipOrCoord } from '../utils/tier.js';
 import { registerRenderer, refreshCall } from './calls.js';
 import { COMBAT_CONFIG } from './combat.js';
+import { rebuildDashboard } from './intel.js';
 
 function getDefCallsChannelId() {
   const row = prepare('SELECT channel_id FROM panels WHERE type = ?').get('def-calls');
@@ -223,6 +224,7 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
   }
 
   await interaction.reply({ content: `✅ Call #${callId} posted.`, ephemeral: true });
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild:', err.message));
   return callId;
 }
 
@@ -296,6 +298,7 @@ export async function handleSendDefSubmitModal(interaction) {
   await maybeMarkFilled(interaction, callId);
 
   await interaction.reply({ content: `✅ Committed: ${inf} inf / ${cav} cav (${defValue(inf, cav)} def).`, ephemeral: true });
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild:', err.message));
 }
 
 export async function handleSendDefAddSubmitModal(interaction) {
@@ -320,6 +323,7 @@ export async function handleSendDefAddSubmitModal(interaction) {
   await maybeMarkFilled(interaction, callId);
 
   await interaction.reply({ content: `✅ Added: +${inf} inf / +${cav} cav.`, ephemeral: true });
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild:', err.message));
 }
 
 // ── Mark filled, lock embed, archive to leadership channel ───────────────────
@@ -334,6 +338,7 @@ async function maybeMarkFilled(interaction, callId) {
     prepare("UPDATE calls SET status = 'filled' WHERE id = ?").run(callId);
     await refreshCall(interaction.client, callId);
     await postLeadershipArchive(interaction, callId);
+    rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild:', err.message));
   }
 }
 

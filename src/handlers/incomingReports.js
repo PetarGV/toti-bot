@@ -14,6 +14,7 @@ import { getHomeCoordsString } from './profile.js';
 import { avgWaveGapSec } from '../utils/defMath.js';
 import { classifyAndPersist, cascadeChiefFrom } from './threat.js';
 import { isLeadershipOrCoord } from '../utils/tier.js';
+import { rebuildDashboard } from './intel.js';
 
 // Stub for future paste-mode (Section 3 of spec). Returns null until implemented.
 export function parseRallyPointPaste(/* pastedText */) {
@@ -171,6 +172,7 @@ export async function createIncomingReport(interaction, fields) {
     }
   }
 
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild after report:', err.message));
   return id;
 }
 
@@ -288,6 +290,7 @@ export async function handleReclassifySelect(interaction) {
     }
   }
   await interaction.update({ content: `✅ Report #${reportId} reclassified.`, components: [] });
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild after report:', err.message));
 }
 
 // ── report:close button ──────────────────────────────────────────────────────
@@ -312,4 +315,5 @@ export async function handleReportCloseButton(interaction) {
     }
   }
   await interaction.reply({ content: `🔒 Report #${reportId} closed.`, ephemeral: true });
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild after report:', err.message));
 }
