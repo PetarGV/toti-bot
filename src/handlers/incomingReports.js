@@ -293,6 +293,20 @@ export async function handleReclassifySelect(interaction) {
   rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild after report:', err.message));
 }
 
+// ── /report-incoming slash command ───────────────────────────────────────────
+export async function handleReportIncomingCommand(interaction) {
+  const defender = parseCoords(interaction.options.getString('defender'));
+  if (!defender) return interaction.reply({ content: '❌ Invalid defender coords.', ephemeral: true });
+  const attacker = parseCoords(interaction.options.getString('attacker'));
+  if (!attacker) return interaction.reply({ content: '❌ Invalid attacker coords.', ephemeral: true });
+  const firstEta = parseDeadline(interaction.options.getString('first_eta'));
+  if (!firstEta) return interaction.reply({ content: '❌ Invalid first wave ETA.', ephemeral: true });
+  const waves = interaction.options.getInteger('waves');
+  const waveSpreadSec = interaction.options.getInteger('wave_spread_sec');
+  const notes = interaction.options.getString('notes');
+  await createIncomingReport(interaction, { defender, attacker, firstEta, waves, waveSpreadSec, notes });
+}
+
 // ── report:close button ──────────────────────────────────────────────────────
 export async function handleReportCloseButton(interaction) {
   const reportId = interaction.customId.split(':')[2];

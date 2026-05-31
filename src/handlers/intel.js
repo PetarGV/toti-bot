@@ -320,6 +320,56 @@ export function buildAttackerDrillEmbed(x, y, windowSec = DEFAULT_WINDOW_SEC) {
   return embed;
 }
 
+// ── /intel slash command ──────────────────────────────────────────────────────
+export async function handleIntelCommand(interaction) {
+  if (!isLeadershipOrCoord(interaction.member)) return interaction.reply({ content: '❌ Leadership / Def Coord only.', ephemeral: true });
+  const days = interaction.options.getInteger('days');
+  const targetStr = interaction.options.getString('target');
+  const attackerStr = interaction.options.getString('attacker');
+  const windowSec = (days ? days : 1) * 86400;
+
+  if (targetStr) {
+    const c = parseCoords(targetStr);
+    if (!c) return interaction.reply({ content: '❌ Invalid target coords.', ephemeral: true });
+    return interaction.reply({ embeds: [buildTargetDrillEmbed(c.x, c.y, windowSec)], ephemeral: true });
+  }
+  if (attackerStr) {
+    const c = parseCoords(attackerStr);
+    if (!c) return interaction.reply({ content: '❌ Invalid attacker coords.', ephemeral: true });
+    return interaction.reply({ embeds: [buildAttackerDrillEmbed(c.x, c.y, windowSec)], ephemeral: true });
+  }
+  await interaction.reply({ embeds: [buildDashboardEmbed({ windowSec })], ephemeral: true });
+}
+
+// ── /reclassify slash command ─────────────────────────────────────────────────
+export async function handleReclassifyCommand(interaction) {
+  if (!isLeadershipOrCoord(interaction.member)) return interaction.reply({ content: '❌ Leadership / Def Coord only.', ephemeral: true });
+  const reportId = interaction.options.getInteger('report');
+  const choice = interaction.options.getString('as');
+  const row = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
+  if (!row) return interaction.reply({ content: 'Report not found.', ephemeral: true });
+
+  if (choice === 'auto') {
+    prepare('UPDATE incoming_reports SET threat_override = NULL WHERE id = ?').run(reportId);
+    const { classifyAndPersist } = await import('./threat.js');
+    classifyAndPersist(reportId);
+  } else {
+    prepare('UPDATE incoming_reports SET threat_override = ? WHERE id = ?').run(choice, reportId);
+  }
+  const after = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
+  const reportsPanel = prepare('SELECT channel_id FROM panels WHERE type = ?').get('reports');
+  if (after?.reports_msg_id && reportsPanel) {
+    try {
+      const { buildReportEmbed, buildReportComponents } = await import('./incomingReports.js');
+      const ch = await interaction.client.channels.fetch(reportsPanel.channel_id);
+      const m = await ch.messages.fetch(after.reports_msg_id);
+      await m.edit({ embeds: [buildReportEmbed(after)], components: buildReportComponents(after) });
+    } catch (err) { logger.warn('reclassify command re-render skipped:', err.message); }
+  }
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild:', err.message));
+  await interaction.reply({ content: `✅ Report #${reportId} reclassified.`, ephemeral: true });
+}
+
 export async function handleIntelRefreshButton(interaction) {
   if (!isLeadershipOrCoord(interaction.member)) {
     return interaction.reply({ content: '❌ Leadership / Def Coord only.', ephemeral: true });

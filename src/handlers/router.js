@@ -31,9 +31,7 @@ import {
   handleCombatPickSelect,
   handleCombatPickContinueButton,
   handleCombatPickModal,
-  handleDefenseCommand,
   handleOffenseCommand,
-  handleReinforceCommand,
 } from './combat.js';
 import {
   handleReportChooseButton,
@@ -43,6 +41,7 @@ import {
   handleReclassifyButton,
   handleReclassifySelect,
   handleReportCloseButton,
+  handleReportIncomingCommand,
 } from './incomingReports.js';
 import {
   handleScoutButton,
@@ -95,6 +94,9 @@ import {
   handleEscalateActiveButton,
   handleEscalatePermaButton,
   handleDefCallFromReportModal,
+  handleActiveDefCommand,
+  handlePermaDefCommand,
+  handleSendingDefCommand,
 } from './defCalls.js';
 import {
   handleIntelRefreshButton,
@@ -104,6 +106,8 @@ import {
   handleIntelAttackerModal,
   handleIntelWindowButton,
   handleIntelWindowSelect,
+  handleIntelCommand,
+  handleReclassifyCommand,
 } from './intel.js';
 
 async function notImplemented(interaction) {
@@ -129,10 +133,14 @@ export async function routeCommand(interaction) {
       case 'admin':     return await handleAdmin(interaction);
       case 'whois':     return await handleWhoisCommand(interaction);
       case 'nearby':    return await handleNearbyCommand(interaction);
-      case 'push':      return await handlePushCommand(interaction);
-      case 'defense':   return await handleDefenseCommand(interaction);
+      case 'push':            return await handlePushCommand(interaction);
+      case 'report-incoming': return await handleReportIncomingCommand(interaction);
+      case 'active-def':      return await handleActiveDefCommand(interaction);
+      case 'perma-def':       return await handlePermaDefCommand(interaction);
+      case 'sending-def':     return await handleSendingDefCommand(interaction);
+      case 'intel':           return await handleIntelCommand(interaction);
+      case 'reclassify':      return await handleReclassifyCommand(interaction);
       case 'offense':   return await handleOffenseCommand(interaction);
-      case 'reinforce': return await handleReinforceCommand(interaction);
       case 'scout':     return await handleScoutCommand(interaction);
       case 'status':   return await handleStatusCommand(interaction);
       case 'calls':    return await handleCallsCommand(interaction);

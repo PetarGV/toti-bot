@@ -438,6 +438,77 @@ async function showEscalateModal(interaction, type, reportId) {
   return interaction.showModal(modal);
 }
 
+// ── /active-def slash command ─────────────────────────────────────────────────
+export async function handleActiveDefCommand(interaction) {
+  if (!isLeadershipOrCoord(interaction.member)) return interaction.reply({ content: '❌ Leadership / Def Coord only.', ephemeral: true });
+  const coords = parseCoords(interaction.options.getString('coords'));
+  if (!coords) return interaction.reply({ content: '❌ Invalid coords.', ephemeral: true });
+  const arrival = parseDeadline(interaction.options.getString('arrival'));
+  if (!arrival) return interaction.reply({ content: '❌ Invalid impact time.', ephemeral: true });
+  const troopsNeeded = interaction.options.getInteger('troops_needed');
+  const notes = interaction.options.getString('notes');
+  await createDefCallDirect(interaction, 'def_active', coords, arrival, troopsNeeded, notes, null);
+}
+
+// ── /perma-def slash command ──────────────────────────────────────────────────
+export async function handlePermaDefCommand(interaction) {
+  if (!isLeadershipOrCoord(interaction.member)) return interaction.reply({ content: '❌ Leadership / Def Coord only.', ephemeral: true });
+  const coords = parseCoords(interaction.options.getString('coords'));
+  if (!coords) return interaction.reply({ content: '❌ Invalid coords.', ephemeral: true });
+  const troopsNeeded = interaction.options.getInteger('troops_needed');
+  const notes = interaction.options.getString('notes');
+  await createDefCallDirect(interaction, 'def_perma', coords, null, troopsNeeded, notes, null);
+}
+
+async function createDefCallDirect(interaction, type, coords, arrival, troopsNeeded, notes, sourceReportId) {
+  const channelId = getDefCallsChannelId();
+  if (!channelId) return interaction.reply({ content: '❌ No def-calls channel configured.', ephemeral: true });
+  const payload = JSON.stringify({ troops_needed: troopsNeeded, notes: notes ?? null, source_report_id: sourceReportId });
+  const result = prepare(`
+    INSERT INTO calls (type, author_id, x, y, deadline, channel_id, status, payload)
+    VALUES (?, ?, ?, ?, ?, ?, 'open', ?)
+  `).run(type, interaction.user.id, coords.x, coords.y, arrival, channelId, payload);
+  const callId = result.lastInsertRowid;
+  inc('callsCreated');
+
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  const channel = await interaction.client.channels.fetch(channelId);
+  const mention = await getDefRoleMention(channel.guild);
+  const msg = await channel.send({
+    content: mention || '',
+    embeds: [buildDefCallEmbed(call, [])],
+    components: buildDefCallComponents(call),
+    allowedMentions: { parse: ['roles'] },
+  });
+  prepare('UPDATE calls SET message_id = ? WHERE id = ?').run(msg.id, callId);
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild:', err.message));
+  await interaction.reply({ content: `✅ Call #${callId} posted.`, ephemeral: true });
+}
+
+// ── /sending-def slash command ────────────────────────────────────────────────
+export async function handleSendingDefCommand(interaction) {
+  const callId = interaction.options.getInteger('call');
+  const inf = interaction.options.getInteger('inf');
+  const cav = interaction.options.getInteger('cav');
+  if (inf === 0 && cav === 0) return interaction.reply({ content: '❌ At least one of Inf or Cav must be > 0.', ephemeral: true });
+
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call || call.status !== 'open' || (call.type !== 'def_active' && call.type !== 'def_perma')) {
+    return interaction.reply({ content: '❌ Call not found or not open.', ephemeral: true });
+  }
+  const existing = prepare('SELECT id FROM pledges WHERE call_id = ? AND user_id = ?').get(callId, interaction.user.id);
+  if (existing) {
+    prepare('UPDATE pledges SET inf = ?, cav = ?, amount = NULL WHERE call_id = ? AND user_id = ?').run(inf, cav, callId, interaction.user.id);
+  } else {
+    prepare('INSERT INTO pledges (call_id, user_id, inf, cav) VALUES (?, ?, ?, ?)').run(callId, interaction.user.id, inf, cav);
+  }
+  inc('pledgesSubmitted');
+  await refreshCall(interaction.client, callId);
+  await maybeMarkFilled(interaction, callId);
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild:', err.message));
+  await interaction.reply({ content: `✅ Pledged ${inf} inf / ${cav} cav (${defValue(inf, cav)} def).`, ephemeral: true });
+}
+
 export async function handleDefCallFromReportModal(interaction) {
   const parts = interaction.customId.split(':');
   const type = parts[2];
