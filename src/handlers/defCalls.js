@@ -17,13 +17,11 @@ import { COMBAT_CONFIG } from './combat.js';
 import { rebuildDashboard } from './intel.js';
 
 function getDefCallsChannelId() {
-  const row = prepare('SELECT channel_id FROM panels WHERE type = ?').get('def-calls');
-  return row?.channel_id ?? null;
+  return prepare('SELECT value FROM config WHERE key=?').get('def_calls_channel_id')?.value ?? null;
 }
 
 function getLeadershipChannelId() {
-  const row = prepare('SELECT channel_id FROM panels WHERE type = ?').get('leadership');
-  return row?.channel_id ?? null;
+  return prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
 }
 
 function progressBar(pct) {
@@ -211,9 +209,9 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
     prepare('UPDATE incoming_reports SET escalated_call_id = ? WHERE id = ?').run(callId, sourceReportId);
     try {
       const reportRow = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(sourceReportId);
-      const reportsPanel = prepare('SELECT channel_id FROM panels WHERE type = ?').get('reports');
-      if (reportRow?.reports_msg_id && reportsPanel) {
-        const ch = await interaction.client.channels.fetch(reportsPanel.channel_id);
+      const reportsChannelId = prepare('SELECT value FROM config WHERE key=?').get('reports_channel_id')?.value ?? null;
+      if (reportRow?.reports_msg_id && reportsChannelId) {
+        const ch = await interaction.client.channels.fetch(reportsChannelId);
         const rmsg = await ch.messages.fetch(reportRow.reports_msg_id);
         const { buildReportEmbed, buildReportComponents } = await import('./incomingReports.js');
         await rmsg.edit({ embeds: [buildReportEmbed(reportRow)], components: buildReportComponents(reportRow) });

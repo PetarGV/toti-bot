@@ -206,8 +206,7 @@ export function buildDashboardComponents() {
 }
 
 function getLeadershipChannelId() {
-  const row = prepare('SELECT channel_id FROM panels WHERE type = ?').get('leadership');
-  return row?.channel_id ?? null;
+  return prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
 }
 
 export async function rebuildDashboard(client) {
@@ -357,11 +356,11 @@ export async function handleReclassifyCommand(interaction) {
     prepare('UPDATE incoming_reports SET threat_override = ? WHERE id = ?').run(choice, reportId);
   }
   const after = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
-  const reportsPanel = prepare('SELECT channel_id FROM panels WHERE type = ?').get('reports');
-  if (after?.reports_msg_id && reportsPanel) {
+  const reportsChannelId = prepare('SELECT value FROM config WHERE key=?').get('reports_channel_id')?.value ?? null;
+  if (after?.reports_msg_id && reportsChannelId) {
     try {
       const { buildReportEmbed, buildReportComponents } = await import('./incomingReports.js');
-      const ch = await interaction.client.channels.fetch(reportsPanel.channel_id);
+      const ch = await interaction.client.channels.fetch(reportsChannelId);
       const m = await ch.messages.fetch(after.reports_msg_id);
       await m.edit({ embeds: [buildReportEmbed(after)], components: buildReportComponents(after) });
     } catch (err) { logger.warn('reclassify command re-render skipped:', err.message); }

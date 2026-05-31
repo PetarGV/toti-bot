@@ -291,4 +291,37 @@ export function runMigrations() {
   } catch (err) {
     logger.warn("Migration defense → def-calls skipped:", err.message);
   }
+
+  // One-shot: backfill explicit channel config keys from the most recently
+  // deployed panel of each operational type. Heals prod where the panels
+  // table contains duplicate rows after the defense→def-calls migration.
+  try {
+    const flag = prepare("SELECT value FROM config WHERE key=?").get(
+      "backfilled_channel_config",
+    );
+    if (!flag) {
+      const KEYS = {
+        reports: "reports_channel_id",
+        "def-calls": "def_calls_channel_id",
+        leadership: "leadership_channel_id",
+      };
+      for (const [type, key] of Object.entries(KEYS)) {
+        const row = prepare(
+          "SELECT channel_id FROM panels WHERE type = ? ORDER BY created_at DESC, rowid DESC LIMIT 1",
+        ).get(type);
+        if (row?.channel_id) {
+          prepare("INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)").run(
+            key,
+            row.channel_id,
+          );
+        }
+      }
+      prepare("INSERT INTO config (key, value) VALUES (?, ?)").run(
+        "backfilled_channel_config",
+        "true",
+      );
+    }
+  } catch (err) {
+    logger.warn("Migration: backfill channel config skipped:", err.message);
+  }
 }

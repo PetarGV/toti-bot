@@ -98,8 +98,7 @@ export function buildReportComponents(row) {
 }
 
 function getReportsChannelId() {
-  const row = prepare('SELECT channel_id FROM panels WHERE type = ?').get('reports');
-  return row?.channel_id ?? null;
+  return prepare('SELECT value FROM config WHERE key=?').get('reports_channel_id')?.value ?? null;
 }
 
 async function getRoleMentionByEnv(guild, envKey) {

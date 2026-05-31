@@ -83,6 +83,7 @@ test('from-report def call modal creates call and links the report', async () =>
 
   const reportId = insertReport();
   prepare('INSERT INTO panels (type, channel_id, message_id) VALUES (?, ?, ?)').run('def-calls', 'def-channel', 'panel-msg');
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
 
   const sent = [];
   const guild = {
