@@ -70,7 +70,7 @@ test('report escalate active button opens a pre-filled def call modal', async ()
   assert.equal(json.custom_id, `combat:create_def_from_report:def_active:${reportId}`);
   assert.equal(componentById(json, 'coords').value, '(-12|34)');
   assert.equal(parseDeadline(componentById(json, 'arrival').value), 1_900_000_000);
-  assert.match(componentById(json, 'notes').value, /Wave gap ~2\.0s/);
+  assert.match(componentById(json, 'notes').value, /Wave spread 6s/);
   assert.match(componentById(json, 'notes').value, /in-between def possible/);
 });
 

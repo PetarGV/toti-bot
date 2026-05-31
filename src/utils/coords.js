@@ -1,5 +1,6 @@
-// Accepts: (x|y)  x|y  x/y  -x|-y  -x/y  etc.
-const COORD_RE = /^\(?\s*(-?\d{1,3})\s*[|\/]\s*(-?\d{1,3})\s*\)?$/;
+// Accepts many formats: (x|y), x|y, x/y, x,y, x;y, x y, [-12|34], {-12 / 34}, etc.
+// Two signed integers separated by any of: | / , ; or whitespace, with optional () [] {} wrapping.
+const COORD_RE = /^[\s\(\[\{]*(-?\d{1,3})\s*[|/,;\s]+\s*(-?\d{1,3})[\s\)\]\}]*$/;
 
 export function parseCoords(input) {
   const m = String(input).trim().match(COORD_RE);
