@@ -10,6 +10,7 @@ import { discordTimestamp } from '../utils/time.js';
 import { snapshot } from '../utils/metrics.js';
 import { COLORS, FOOTER } from '../utils/i18n.js';
 import { logger } from '../utils/logger.js';
+import { ensureScoutInfrastructure } from '../utils/scoutChannels.js';
 import {
   buildMemberMapAudit,
   getTravianPlayersFromMap,
@@ -112,6 +113,17 @@ export function reportableUnmatchedRows(audit) {
 
 export async function handleSetup(interaction) {
   const type = interaction.options.getSubcommand();
+  if (type === 'scout') {
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      await ensureScoutInfrastructure(interaction.guild);
+    } catch (err) {
+      logger.warn('Scout setup infrastructure failed:', err.message);
+      return interaction.editReply({
+        content: `❌ Could not prepare scout channels: ${err.message}`,
+      });
+    }
+  }
   await deployPanel(interaction, type);
 }
 

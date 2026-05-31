@@ -20,6 +20,7 @@ const ALL_TABLES = [
   'incoming_reports',
   'user_ign_links',
   'travian_accounts',
+  'scout_reports',
   'pledges',
   'calls',
   'panels',

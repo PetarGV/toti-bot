@@ -61,6 +61,21 @@ CREATE TABLE IF NOT EXISTS pledges (
   UNIQUE(call_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS scout_reports (
+  call_id             INTEGER PRIMARY KEY REFERENCES calls(id) ON DELETE CASCADE,
+  scout_code          TEXT NOT NULL,
+  temp_channel_id     TEXT NOT NULL,
+  archive_channel_id  TEXT,
+  archive_message_id  TEXT,
+  reporter_id         TEXT,
+  report_note         TEXT,
+  screenshot_url      TEXT,
+  reported_at         INTEGER,
+  delete_after        INTEGER,
+  temp_deleted_at     INTEGER,
+  created_at          INTEGER DEFAULT (unixepoch())
+);
+
 CREATE TABLE IF NOT EXISTS x_world (
   id         INTEGER PRIMARY KEY,
   x          INTEGER NOT NULL,

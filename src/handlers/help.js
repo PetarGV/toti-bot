@@ -103,8 +103,8 @@ const PAGES = {
     description: 'Request scouts and look up village info from cached map data.',
     fields: [
       { name: '👀 Scout Request',
-        value: '**Panel:** click 👀 Scout · **Slash:** `/scout coords [notes]`\n' +
-               'Scouts click **👀 On it** to commit, then **📝 Submit Report** to paste their findings inline.' },
+        value: '**Panel:** click 👀 Scout · **Slash:** `/scout coords [notes] [min-scouts]`\n' +
+               'The bot creates a temporary scout channel. Scouts click **👀 On it** to enter how many scouts they can send. **📝 Submit Report** starts a 10-minute window for one screenshot, which is archived to `#scout-reports`.' },
       { name: '🔍 Whois Lookup',
         value: '**Panel:** click 🔍 Whois Lookup · **Slash:** `/whois coords:<x|y>`\n' +
                'Returns the village owner, alliance, population, and tribe (when map data is loaded).' },
