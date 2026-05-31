@@ -147,16 +147,18 @@ export function buildDashboardEmbed({ windowSec = DEFAULT_WINDOW_SEC } = {}) {
     embed.addFields({ name: '🛡️ Open def calls', value: lines.join('\n'), inline: false });
   }
 
-  const tally = { fake: 0, real: 0, chief: 0, unknown: 0 };
-  for (const report of reports) {
-    const key = effective(report);
-    tally[key] = (tally[key] ?? 0) + 1;
+  if (reports.length) {
+    const tally = { fake: 0, real: 0, chief: 0, unknown: 0 };
+    for (const report of reports) {
+      const key = effective(report);
+      tally[key] = (tally[key] ?? 0) + 1;
+    }
+    embed.addFields({
+      name: '📊 Threat tally',
+      value: `🟢 Fake ${tally.fake}   🟠 Real ${tally.real}   🔴 Chief ${tally.chief}   ⚪ Unknown ${tally.unknown}`,
+      inline: false,
+    });
   }
-  embed.addFields({
-    name: '📊 Threat tally',
-    value: `🟢 Fake ${tally.fake}   🟠 Real ${tally.real}   🔴 Chief ${tally.chief}   ⚪ Unknown ${tally.unknown}`,
-    inline: false,
-  });
 
   const inbetween = reports
     .filter(report => report.wave_spread_sec != null && report.waves > 1)
