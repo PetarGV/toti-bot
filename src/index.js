@@ -8,6 +8,7 @@ import { initDb, prepare, flushDb, getConfig } from './db/client.js';
 import { restorePanels } from './panel/deploy.js';
 import { startMapFetchJob, fetchMapWithRetry } from './jobs/mapFetch.js';
 import { startExpiryJob } from './jobs/expiry.js';
+import { startScoutReportCleanupJob } from './jobs/scoutReportCleanup.js';
 import { startBackupJob } from './jobs/backup.js';
 import { startTimerTickJob } from './jobs/timerTick.js';
 import { startMemberSyncJob, runMemberSync } from './jobs/memberSync.js';
@@ -16,6 +17,7 @@ import { startHealthServer, stopHealthServer } from './server/health.js';
 import { routeCommand, routeButton, routeModal, routeSelect } from './handlers/router.js';
 import { handleGuildMemberAdd, handleGuildMemberRemove } from './handlers/onboarding.js';
 import { handleTranslateReaction } from './handlers/translateReaction.js';
+import { handleScoutReportMessage } from './handlers/scoutReportUpload.js';
 import { refreshOpenCalls } from './handlers/calls.js';
 import { logger, flushLogs } from './utils/logger.js';
 import { recordError } from './utils/metrics.js';
@@ -51,6 +53,7 @@ client.once('clientReady', async () => {
   logger.info(`Restored ${openCount.c} active calls.`);
   startMapFetchJob(client);
   startExpiryJob(client);
+  startScoutReportCleanupJob(client);
   startBackupJob(client);
   startTimerTickJob(client);
   startMemberSyncJob(client);
@@ -127,6 +130,15 @@ client.on(Events.MessageReactionAdd, async (reaction, user) => {
     await handleTranslateReaction(reaction, user);
   } catch (err) {
     logger.error('messageReactionAdd handler crashed:', err);
+    recordError(err);
+  }
+});
+
+client.on(Events.MessageCreate, async (message) => {
+  try {
+    await handleScoutReportMessage(message);
+  } catch (err) {
+    logger.error('messageCreate scout report handler crashed:', err);
     recordError(err);
   }
 });

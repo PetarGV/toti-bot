@@ -3,6 +3,7 @@ import { prepare } from '../db/client.js';
 import { formatAmount } from '../utils/resources.js';
 import { COLORS, FOOTER } from '../utils/i18n.js';
 import { normalizeIgn } from '../utils/ign.js';
+import { isScoutReport } from '../utils/scoutReports.js';
 
 const MEDALS = ['🥇', '🥈', '🥉'];
 
@@ -62,13 +63,18 @@ function topDefenders() {
 }
 
 function topScouts() {
-  const rows = prepare(`
-    SELECT pledges.user_id, COUNT(*) AS reports
+  const pledgeRows = prepare(`
+    SELECT pledges.user_id, pledges.amount
     FROM pledges
     JOIN calls ON calls.id = pledges.call_id
-    WHERE calls.type = 'scout' AND pledges.amount IS NOT NULL AND pledges.amount != 'On it'
-    GROUP BY pledges.user_id
+    WHERE calls.type = 'scout' AND pledges.amount IS NOT NULL
   `).all();
+  const reportCounts = new Map();
+  for (const row of pledgeRows) {
+    if (!isScoutReport(row.amount)) continue;
+    reportCounts.set(row.user_id, (reportCounts.get(row.user_id) ?? 0) + 1);
+  }
+  const rows = [...reportCounts.entries()].map(([user_id, reports]) => ({ user_id, reports }));
   return groupByIgn(rows, ['reports']).sort((a, b) => b.reports - a.reports).slice(0, 10);
 }
 

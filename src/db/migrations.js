@@ -97,6 +97,27 @@ export function runMigrations() {
   }
 
   try {
+    exec(`
+      CREATE TABLE IF NOT EXISTS scout_reports (
+        call_id             INTEGER PRIMARY KEY REFERENCES calls(id) ON DELETE CASCADE,
+        scout_code          TEXT NOT NULL,
+        temp_channel_id     TEXT NOT NULL,
+        archive_channel_id  TEXT,
+        archive_message_id  TEXT,
+        reporter_id         TEXT,
+        report_note         TEXT,
+        screenshot_url      TEXT,
+        reported_at         INTEGER,
+        delete_after        INTEGER,
+        temp_deleted_at     INTEGER,
+        created_at          INTEGER DEFAULT (unixepoch())
+      )
+    `);
+  } catch (err) {
+    logger.warn('Migration scout_reports table skipped:', err.message);
+  }
+
+  try {
     exec("UPDATE panels SET type='scout' WHERE type='intel'");
   } catch (err) {
     logger.warn("Migration panels.type intel→scout skipped:", err.message);

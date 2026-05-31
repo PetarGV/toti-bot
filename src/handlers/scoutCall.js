@@ -6,11 +6,22 @@ import {
 import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl } from '../utils/travianUrl.js';
+import { discordTimestamp } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
+import { ensureScoutInfrastructure, createScoutTempChannel } from '../utils/scoutChannels.js';
+import {
+  decodeScoutCommitmentAmount,
+  decodeScoutReportText,
+  encodeScoutCommitmentAmount,
+  generateScoutCode,
+  isScoutCommitment,
+  parseScoutCommitmentAmount,
+} from '../utils/scoutReports.js';
 import { registerRenderer } from './calls.js';
 import { notifyAuthorOfPledge, notifyAuthorIfMilestone } from './notify.js';
 import { getHomeCoordsString } from './profile.js';
+import { startPendingScoutReportUpload } from './scoutReportUpload.js';
 
 // ── Button entry: call:scout ──────────────────────────────────────────────────
 export async function handleScoutButton(interaction) {
@@ -38,69 +49,177 @@ export async function handleScoutButton(interaction) {
     .setRequired(false)
     .setMaxLength(500);
 
+  const minScoutsInput = new TextInputBuilder()
+    .setCustomId('min_scouts')
+    .setLabel('Minimum scouts needed (optional)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setMaxLength(50);
+
   modal.addComponents(
     new ActionRowBuilder().addComponents(coordsInput),
     new ActionRowBuilder().addComponents(notesInput),
+    new ActionRowBuilder().addComponents(minScoutsInput),
   );
 
   await interaction.showModal(modal);
 }
 
 // ── Core: insert scout call + post embed ─────────────────────────────────────
-async function createScoutCall(interaction, { x, y, notes }) {
-  const payload = JSON.stringify({ notes: notes || null });
+function getOptionalTextInputValue(fields, customId) {
+  if (!fields?.getTextInputValue) return null;
+  try {
+    return fields.getTextInputValue(customId) || null;
+  } catch {
+    return null;
+  }
+}
 
-  const result = prepare(`
-    INSERT INTO calls (type, author_id, x, y, deadline, channel_id, status, payload)
-    VALUES ('scout', ?, ?, ?, NULL, ?, 'open', ?)
-  `).run(interaction.user.id, x, y, interaction.channel.id, payload);
+function parseCallPayload(call) {
+  try {
+    return JSON.parse(call?.payload || '{}');
+  } catch {
+    return {};
+  }
+}
 
-  const callId = result.lastInsertRowid;
-  inc('callsCreated');
+function formatArchivedScoutReport(reportRow, guildId) {
+  const lines = [];
+  if (reportRow.reporter_id) {
+    lines.push(`Reporter: <@${reportRow.reporter_id}>`);
+  }
+  if (reportRow.reported_at) {
+    lines.push(`Submitted: ${discordTimestamp(reportRow.reported_at, 'R')}`);
+  }
+  if (reportRow.archive_channel_id && reportRow.archive_message_id && guildId) {
+    lines.push(`Archive: https://discord.com/channels/${guildId}/${reportRow.archive_channel_id}/${reportRow.archive_message_id}`);
+  } else if (reportRow.archive_message_id) {
+    lines.push(`Archive message: ${reportRow.archive_message_id}`);
+  } else if (reportRow.archive_channel_id) {
+    lines.push(`Archive: <#${reportRow.archive_channel_id}>`);
+  }
+  if (reportRow.delete_after) {
+    lines.push(`Temp channel deletes ${discordTimestamp(reportRow.delete_after, 'R')}`);
+  }
+  return lines.join('\n');
+}
 
-  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
-  const embed = buildScoutEmbed(call, []);
-  const components = buildScoutComponents(call);
+async function createScoutCall(interaction, { x, y, notes, minScouts }) {
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply();
+  }
 
-  const msg = await interaction.reply({
-    content: '',
-    embeds: [embed],
-    components,
-    fetchReply: true,
+  const scoutCode = generateScoutCode();
+  const guildId = interaction.guildId || interaction.guild?.id || null;
+  const target = prepare('SELECT player, alliance FROM x_world WHERE x = ? AND y = ?').get(x, y) || null;
+  const targetPlayer = target?.player || null;
+  const targetAlliance = target?.alliance || null;
+  const { category } = await ensureScoutInfrastructure(interaction.guild);
+  const tempChannel = await createScoutTempChannel(interaction.guild, {
+    category,
+    code: scoutCode,
+    x,
+    y,
+    player: targetPlayer,
+    topic: `Scout ${scoutCode} for ${formatCoords(x, y)}`,
   });
 
-  prepare('UPDATE calls SET message_id = ? WHERE id = ?').run(msg.id, callId);
+  const payload = JSON.stringify({
+    notes: notes || null,
+    minScouts: minScouts || null,
+    targetPlayer,
+    targetAlliance,
+    tempChannelId: tempChannel.id,
+    scoutCode,
+    guildId,
+  });
+  let callId = null;
+  let published = false;
+
+  try {
+    const result = prepare(`
+      INSERT INTO calls (type, author_id, x, y, deadline, channel_id, status, payload)
+      VALUES ('scout', ?, ?, ?, NULL, ?, 'open', ?)
+    `).run(interaction.user.id, x, y, tempChannel.id, payload);
+
+    callId = result.lastInsertRowid;
+    inc('callsCreated');
+
+    prepare(`
+      INSERT INTO scout_reports (call_id, scout_code, temp_channel_id)
+      VALUES (?, ?, ?)
+    `).run(callId, scoutCode, tempChannel.id);
+
+    const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+    const embed = buildScoutEmbed(call, []);
+    const components = buildScoutComponents(call);
+
+    const msg = await tempChannel.send({
+      embeds: [embed],
+      components,
+    });
+
+    prepare('UPDATE calls SET message_id = ? WHERE id = ?').run(msg.id, callId);
+    published = true;
+  } catch (err) {
+    if (!published && callId != null) {
+      try {
+        prepare('DELETE FROM scout_reports WHERE call_id = ?').run(callId);
+      } catch (cleanupErr) {
+        logger.warn('cleanup scout_reports failed:', cleanupErr.message);
+      }
+      try {
+        prepare('DELETE FROM calls WHERE id = ?').run(callId);
+      } catch (cleanupErr) {
+        logger.warn('cleanup calls failed:', cleanupErr.message);
+      }
+    }
+
+    if (!published && typeof tempChannel?.delete === 'function') {
+      try {
+        await tempChannel.delete();
+      } catch (cleanupErr) {
+        logger.warn('cleanup temp channel failed:', cleanupErr.message);
+      }
+    }
+
+    throw err;
+  }
+
+  await interaction.editReply({ content: `Scout request created: <#${tempChannel.id}>` });
 }
 
 // ── Modal submit: scout:create ────────────────────────────────────────────────
 export async function handleScoutCreateModal(interaction) {
   const coordsStr = interaction.fields.getTextInputValue('coords');
   const notes     = interaction.fields.getTextInputValue('notes') || null;
+  const minScouts = getOptionalTextInputValue(interaction.fields, 'min_scouts');
 
   const coords = parseCoords(coordsStr);
   if (!coords) {
     return interaction.reply({ content: `❌ Invalid coordinates: \`${coordsStr}\`.`, ephemeral: true });
   }
 
-  await createScoutCall(interaction, { x: coords.x, y: coords.y, notes });
+  await createScoutCall(interaction, { x: coords.x, y: coords.y, notes, minScouts });
 }
 
 // ── Slash command handler ─────────────────────────────────────────────────────
 export async function handleScoutCommand(interaction) {
   const coordsStr = interaction.options.getString('coords');
   const notes     = interaction.options.getString('notes') || null;
+  const minScouts = interaction.options.getString('min-scouts') || null;
 
   const coords = parseCoords(coordsStr);
   if (!coords) {
     return interaction.reply({ content: '❌ Invalid coordinates.', ephemeral: true });
   }
 
-  await createScoutCall(interaction, { x: coords.x, y: coords.y, notes });
+  await createScoutCall(interaction, { x: coords.x, y: coords.y, notes, minScouts });
 }
 
 // ── Response button handlers ──────────────────────────────────────────────────
 
-// scout:join:<callId> — toggles "On it" pledge
+// scout:join:<callId> opens commitment amount modal
 export async function handleScoutJoinButton(interaction) {
   const callId = parseInt(interaction.customId.split(':')[2], 10);
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
@@ -108,35 +227,66 @@ export async function handleScoutJoinButton(interaction) {
     return interaction.reply({ content: 'This scout request is no longer open.', ephemeral: true });
   }
 
-  const existing = prepare('SELECT id, amount FROM pledges WHERE call_id = ? AND user_id = ?')
+  const existing = prepare('SELECT amount FROM pledges WHERE call_id = ? AND user_id = ?')
     .get(callId, interaction.user.id);
 
-  let msg;
-  if (existing && existing.amount === 'On it') {
-    // Toggle off — remove commitment (but not if they have a report)
-    prepare('DELETE FROM pledges WHERE call_id = ? AND user_id = ?').run(callId, interaction.user.id);
-    msg = '✅ Removed your "On it" commitment.';
-  } else if (!existing) {
-    prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
-      .run(callId, interaction.user.id, 'On it');
-    inc('pledgesSubmitted');
-    msg = '✅ Marked as "On it".';
-  } else {
-    // They have a report — don't overwrite
+  const modal = new ModalBuilder()
+    .setCustomId(`scout:join_submit:${callId}`)
+    .setTitle('Scout Commitment');
+
+  const amountInput = new TextInputBuilder()
+    .setCustomId('amount')
+    .setLabel('Scouts you can send')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setPlaceholder('75 scouts')
+    .setMaxLength(100);
+
+  const existingCommitment = decodeScoutCommitmentAmount(existing?.amount);
+  if (existingCommitment) {
+    amountInput.setValue(existingCommitment);
+  }
+
+  modal.addComponents(new ActionRowBuilder().addComponents(amountInput));
+  return interaction.showModal(modal);
+}
+
+export async function handleScoutJoinModal(interaction) {
+  const callId = parseInt(interaction.customId.split(':')[2], 10);
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call || call.status !== 'open') {
+    return interaction.reply({ content: 'This scout request is no longer open.', ephemeral: true });
+  }
+
+  const amountText = interaction.fields.getTextInputValue('amount').trim();
+  const amount = amountText || 'On it';
+  if (amountText && !parseScoutCommitmentAmount(amountText)) {
+    return interaction.reply({ content: 'Scout commitment must start with a positive number, or leave it blank for On it.', ephemeral: true });
+  }
+  const storedAmount = amountText ? encodeScoutCommitmentAmount(amountText) : 'On it';
+  const existing = prepare('SELECT id, amount FROM pledges WHERE call_id = ? AND user_id = ?')
+    .get(callId, interaction.user.id);
+  if (existing && !isScoutCommitment(existing.amount)) {
     return interaction.reply({ content: 'You already submitted a report. Use "Submit Report" to update it.', ephemeral: true });
+  }
+
+  if (existing) {
+    prepare('UPDATE pledges SET amount = ? WHERE call_id = ? AND user_id = ?')
+      .run(storedAmount, callId, interaction.user.id);
+  } else {
+    prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
+      .run(callId, interaction.user.id, storedAmount);
+    inc('pledgesSubmitted');
   }
 
   const { refreshCall } = await import('./calls.js');
   await refreshCall(interaction.client, callId);
-  await interaction.reply({ content: msg, ephemeral: true });
+  await interaction.reply({ content: `Scout commitment recorded: ${amount}`, ephemeral: true });
 
-  if (!existing) {
-    notifyAuthorOfPledge(interaction.client, callId, interaction.user.id, 'On it').catch(err => logger.warn('notify pledge:', err.message));
-    notifyAuthorIfMilestone(interaction.client, callId).catch(err => logger.warn('notify milestone:', err.message));
-  }
+  notifyAuthorOfPledge(interaction.client, callId, interaction.user.id, amount).catch(err => logger.warn('notify pledge:', err.message));
+  notifyAuthorIfMilestone(interaction.client, callId).catch(err => logger.warn('notify milestone:', err.message));
 }
 
-// scout:report:<callId> — opens modal
 export async function handleScoutReportButton(interaction) {
   const callId = interaction.customId.split(':')[2];
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
@@ -149,11 +299,11 @@ export async function handleScoutReportButton(interaction) {
     .setTitle('Submit Scout Report');
 
   const reportInput = new TextInputBuilder()
-    .setCustomId('report')
-    .setLabel('Scout report')
+    .setCustomId('note')
+    .setLabel('Report note (optional)')
     .setStyle(TextInputStyle.Paragraph)
-    .setRequired(true)
-    .setMaxLength(1000);
+    .setRequired(false)
+    .setMaxLength(500);
 
   modal.addComponents(new ActionRowBuilder().addComponents(reportInput));
   await interaction.showModal(modal);
@@ -181,38 +331,46 @@ export async function handleScoutCloseButton(interaction) {
 export async function handleScoutReportModal(interaction) {
   const callId = parseInt(interaction.customId.split(':')[2], 10);
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
-  if (!call || call.status !== 'open') {
+  if (!call) {
     return interaction.reply({ content: 'This scout request is no longer open.', ephemeral: true });
   }
 
-  const report = interaction.fields.getTextInputValue('report').trim();
-  if (!report) {
-    return interaction.reply({ content: '❌ Report cannot be empty.', ephemeral: true });
+  const reportRow = prepare('SELECT * FROM scout_reports WHERE call_id = ?').get(callId);
+  if (reportRow?.reported_at || reportRow?.archive_message_id) {
+    const payload = parseCallPayload(call);
+    const guildId = interaction.guildId || payload.guildId || null;
+    const archiveLink = reportRow.archive_channel_id && reportRow.archive_message_id
+      ? guildId
+        ? `https://discord.com/channels/${guildId}/${reportRow.archive_channel_id}/${reportRow.archive_message_id}`
+        : `<#${reportRow.archive_channel_id}>`
+      : 'the scout report archive';
+    return interaction.reply({ content: `This scout report is already archived: ${archiveLink}`, ephemeral: true });
   }
 
-  const existing = prepare('SELECT id FROM pledges WHERE call_id = ? AND user_id = ?')
-    .get(callId, interaction.user.id);
-
-  if (existing) {
-    prepare('UPDATE pledges SET amount = ? WHERE call_id = ? AND user_id = ?')
-      .run(report, callId, interaction.user.id);
-  } else {
-    prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)')
-      .run(callId, interaction.user.id, report);
-    inc('pledgesSubmitted');
+  if (call.status !== 'open') {
+    return interaction.reply({ content: 'This scout request is no longer open.', ephemeral: true });
   }
 
-  const { refreshCall } = await import('./calls.js');
-  await refreshCall(interaction.client, callId);
-  await interaction.reply({ content: '✅ Scout report submitted.', ephemeral: true });
+  if (interaction.channelId !== call.channel_id) {
+    return interaction.reply({ content: 'Submit scout reports from the temporary scout channel.', ephemeral: true });
+  }
 
-  notifyAuthorOfPledge(interaction.client, callId, interaction.user.id, 'report').catch(err => logger.warn('notify pledge:', err.message));
-  notifyAuthorIfMilestone(interaction.client, callId).catch(err => logger.warn('notify milestone:', err.message));
+  const note = getOptionalTextInputValue(interaction.fields, 'note');
+  startPendingScoutReportUpload({
+    callId,
+    userId: interaction.user.id,
+    channelId: interaction.channelId,
+    note,
+  });
+  return interaction.reply({
+    content: 'Upload exactly one screenshot in this channel within 10 minutes to archive the scout report.',
+    ephemeral: true,
+  });
 }
 
 // ── Embed builder ─────────────────────────────────────────────────────────────
 export function buildScoutEmbed(call, pledges) {
-  const payload = JSON.parse(call.payload || '{}');
+  const payload = parseCallPayload(call);
 
   let statusPrefix = '';
   let color = 0x3498db;
@@ -222,9 +380,15 @@ export function buildScoutEmbed(call, pledges) {
   // x_world enrichment
   let coordsExtra = '';
   try {
-    const xw = prepare('SELECT player, alliance FROM x_world WHERE x = ? AND y = ?').get(call.x, call.y);
-    if (xw?.player) {
-      coordsExtra = ` — ${xw.player}${xw.alliance ? ` [${xw.alliance}]` : ''}`;
+    const player = payload.targetPlayer || null;
+    const alliance = payload.targetAlliance || null;
+    if (player) {
+      coordsExtra = ` — ${player}${alliance ? ` [${alliance}]` : ''}`;
+    } else {
+      const xw = prepare('SELECT player, alliance FROM x_world WHERE x = ? AND y = ?').get(call.x, call.y);
+      if (xw?.player) {
+        coordsExtra = ` — ${xw.player}${xw.alliance ? ` [${xw.alliance}]` : ''}`;
+      }
     }
   } catch { /* x_world may not exist */ }
 
@@ -238,14 +402,31 @@ export function buildScoutEmbed(call, pledges) {
 
   if (payload.notes) embed.addFields({ name: 'Notes', value: payload.notes, inline: false });
 
-  // Separate pledges into "On it" and "report submitted"
-  const onItList = pledges.filter(p => p.amount === 'On it');
-  const reports  = pledges.filter(p => p.amount !== 'On it');
+  const minimumScouts = parseScoutCommitmentAmount(payload.minScouts);
+  if (minimumScouts) {
+    const committedScouts = pledges.reduce((total, pledge) => (
+      total + (parseScoutCommitmentAmount(decodeScoutCommitmentAmount(pledge.amount)) ?? 0)
+    ), 0);
+    embed.addFields(
+      { name: 'Minimum scouts', value: String(minimumScouts), inline: true },
+      { name: 'Committed scouts', value: String(committedScouts), inline: true },
+      { name: 'Remaining scouts', value: String(Math.max(minimumScouts - committedScouts, 0)), inline: true },
+    );
+  }
+
+  // Separate status commitments from free-text scout reports.
+  const onItList = pledges.filter(p => isScoutCommitment(p.amount));
+  const reports  = pledges
+    .map(p => ({ ...p, reportText: decodeScoutReportText(p.amount) }))
+    .filter(p => p.reportText !== null);
 
   if (onItList.length) {
     embed.addFields({
       name: `On it (${onItList.length})`,
-      value: onItList.map(p => `<@${p.user_id}>`).join(', '),
+      value: onItList.map(p => {
+        const commitment = decodeScoutCommitmentAmount(p.amount);
+        return commitment ? `<@${p.user_id}> (${commitment})` : `<@${p.user_id}>`;
+      }).join(', '),
       inline: false,
     });
   } else {
@@ -254,11 +435,21 @@ export function buildScoutEmbed(call, pledges) {
 
   if (reports.length) {
     const reportBlocks = reports.map(p => {
-      const truncated = p.amount.length > 500 ? p.amount.slice(0, 497) + '...' : p.amount;
+      const truncated = p.reportText.length > 500 ? p.reportText.slice(0, 497) + '...' : p.reportText;
       return `**<@${p.user_id}>:**\n${truncated}`;
     }).join('\n\n');
     embed.addFields({ name: `Reports (${reports.length})`, value: reportBlocks, inline: false });
   }
+
+  const reportRow = prepare('SELECT * FROM scout_reports WHERE call_id = ?').get(call.id);
+  const archivedReport = reportRow?.archive_channel_id || reportRow?.archive_message_id;
+  embed.addFields({
+    name: 'Report',
+    value: archivedReport
+      ? formatArchivedScoutReport(reportRow, payload.guildId || null)
+      : '*No official report yet*',
+    inline: false,
+  });
 
   embed.setFooter({ text: `Call ID: ${call.id}` }).setTimestamp();
 
