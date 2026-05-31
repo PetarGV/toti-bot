@@ -11,9 +11,19 @@ import { discordTimestamp, parseDeadline, formatDeadline } from '../utils/time.j
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getDefRoleMention } from '../utils/role.js';
+import { isLeadershipOrCoord } from '../utils/tier.js';
 import { registerRenderer } from './calls.js';
 import { notifyAuthorOfPledge, notifyAuthorIfMilestone } from './notify.js';
 import { getHomeCoordsString } from './profile.js';
+
+// Returns true if the member can manage this call: author, Administrator,
+// or (for def_active/def_perma only) any Leadership / Def Coord member.
+function canManageCall(call, interaction) {
+  if (call.author_id === interaction.user.id) return true;
+  if (interaction.member?.permissions?.has(PermissionFlagsBits.Administrator)) return true;
+  if ((call.type === 'def_active' || call.type === 'def_perma') && isLeadershipOrCoord(interaction.member)) return true;
+  return false;
+}
 
 // ── Type config ──────────────────────────────────────────────────────────────
 export const COMBAT_CONFIG = {
@@ -265,9 +275,11 @@ export async function handleCombatCloseButton(interaction) {
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   if (!call) return interaction.reply({ content: 'Call not found.', ephemeral: true });
 
-  const isAdmin = interaction.member.permissions.has(PermissionFlagsBits.Administrator);
-  if (call.author_id !== interaction.user.id && !isAdmin) {
-    return interaction.reply({ content: '❌ Only the call author or an admin can close this call.', ephemeral: true });
+  if (!canManageCall(call, interaction)) {
+    const msg = (call.type === 'def_active' || call.type === 'def_perma')
+      ? '❌ Only the call author, Leadership, or Def Coord can close this call.'
+      : '❌ Only the call author or an admin can close this call.';
+    return interaction.reply({ content: msg, ephemeral: true });
   }
 
   prepare("UPDATE calls SET status = 'closed' WHERE id = ?").run(callId);
@@ -282,8 +294,11 @@ export async function handleCombatUpdateButton(interaction) {
   const callId = parseInt(interaction.customId.split(':')[2], 10);
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   if (!call) return interaction.reply({ content: 'Call not found.', ephemeral: true });
-  if (call.author_id !== interaction.user.id) {
-    return interaction.reply({ content: '❌ Only the call author can update this call.', ephemeral: true });
+  if (!canManageCall(call, interaction)) {
+    const msg = (call.type === 'def_active' || call.type === 'def_perma')
+      ? '❌ Only the call author, Leadership, or Def Coord can update this call.'
+      : '❌ Only the call author can update this call.';
+    return interaction.reply({ content: msg, ephemeral: true });
   }
 
   const payload = JSON.parse(call.payload || '{}');
@@ -414,8 +429,11 @@ export async function handleCombatUpdateModal(interaction) {
   const callId = parseInt(interaction.customId.split(':')[2], 10);
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   if (!call) return interaction.reply({ content: 'Call not found.', ephemeral: true });
-  if (call.author_id !== interaction.user.id) {
-    return interaction.reply({ content: '❌ Only the call author can update this call.', ephemeral: true });
+  if (!canManageCall(call, interaction)) {
+    const msg = (call.type === 'def_active' || call.type === 'def_perma')
+      ? '❌ Only the call author, Leadership, or Def Coord can update this call.'
+      : '❌ Only the call author can update this call.';
+    return interaction.reply({ content: msg, ephemeral: true });
   }
 
   const coordsStr  = interaction.fields.getTextInputValue('coords');
@@ -645,8 +663,11 @@ export async function handleCombatPickButton(interaction) {
   const callId = parseInt(interaction.customId.split(':')[2], 10);
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   if (!call) return interaction.reply({ content: 'Call not found.', ephemeral: true });
-  if (call.author_id !== interaction.user.id) {
-    return interaction.reply({ content: '❌ Only the call author can change the deadline.', ephemeral: true });
+  if (!canManageCall(call, interaction)) {
+    const msg = (call.type === 'def_active' || call.type === 'def_perma')
+      ? '❌ Only the call author, Leadership, or Def Coord can change the deadline.'
+      : '❌ Only the call author can change the deadline.';
+    return interaction.reply({ content: msg, ephemeral: true });
   }
   await interaction.reply(buildPickerPayload(callId, pickStateFromDeadline(call.deadline)));
 }
@@ -678,8 +699,11 @@ export async function handleCombatPickContinueButton(interaction) {
 
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   if (!call) return interaction.reply({ content: 'Call not found.', ephemeral: true });
-  if (call.author_id !== interaction.user.id) {
-    return interaction.reply({ content: '❌ Only the call author can change the deadline.', ephemeral: true });
+  if (!canManageCall(call, interaction)) {
+    const msg = (call.type === 'def_active' || call.type === 'def_perma')
+      ? '❌ Only the call author, Leadership, or Def Coord can change the deadline.'
+      : '❌ Only the call author can change the deadline.';
+    return interaction.reply({ content: msg, ephemeral: true });
   }
 
   const preFillSec = call.deadline ? new Date(call.deadline * 1000).getUTCSeconds() : 0;
@@ -710,8 +734,11 @@ export async function handleCombatPickModal(interaction) {
 
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   if (!call) return interaction.reply({ content: 'Call not found.', ephemeral: true });
-  if (call.author_id !== interaction.user.id) {
-    return interaction.reply({ content: '❌ Only the call author can change the deadline.', ephemeral: true });
+  if (!canManageCall(call, interaction)) {
+    const msg = (call.type === 'def_active' || call.type === 'def_perma')
+      ? '❌ Only the call author, Leadership, or Def Coord can change the deadline.'
+      : '❌ Only the call author can change the deadline.';
+    return interaction.reply({ content: msg, ephemeral: true });
   }
 
   const secondsStr = interaction.fields.getTextInputValue('seconds').trim();
