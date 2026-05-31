@@ -96,6 +96,15 @@ import {
   handleEscalatePermaButton,
   handleDefCallFromReportModal,
 } from './defCalls.js';
+import {
+  handleIntelRefreshButton,
+  handleIntelTargetButton,
+  handleIntelAttackerButton,
+  handleIntelTargetModal,
+  handleIntelAttackerModal,
+  handleIntelWindowButton,
+  handleIntelWindowSelect,
+} from './intel.js';
 
 async function notImplemented(interaction) {
   const id = interaction.customId ?? interaction.commandName;
@@ -230,6 +239,13 @@ export async function routeButton(interaction) {
       if (action === 'status') return await handleTimerPanelStatus(interaction);
     }
 
+    if (ns === 'intel') {
+      if (action === 'refresh')  return await handleIntelRefreshButton(interaction);
+      if (action === 'target')   return await handleIntelTargetButton(interaction);
+      if (action === 'attacker') return await handleIntelAttackerButton(interaction);
+      if (action === 'window')   return await handleIntelWindowButton(interaction);
+    }
+
     // Remaining unimplemented
     if (id === 'intel:report') return await notImplemented(interaction);
 
@@ -252,6 +268,7 @@ export async function routeSelect(interaction) {
     if (id.startsWith('sync:pick-conflict:'))     return await handleConflictPickSelect(interaction);
     if (id.startsWith('sync:pick-ambig:'))        return await handleAmbigPickSelect(interaction);
     if (id.startsWith('report:reclassify_pick:')) return await handleReclassifySelect(interaction);
+    if (id === 'intel:window_pick') return await handleIntelWindowSelect(interaction);
     return await interaction.reply({ content: 'Unknown selection.', ephemeral: true });
   } catch (err) {
     logger.error('Select error [%s]:', id, err);
@@ -286,6 +303,8 @@ export async function routeModal(interaction) {
     if (id.startsWith('sync:ambig-ign-modal:')) return await handleAmbigIgnModal(interaction);
     if (id === 'timer:custom_submit')           return await handleTimerPanelCustomModal(interaction);
     if (id === 'report:manual_submit') return await handleReportManualModal(interaction);
+    if (id === 'intel:target_submit')   return await handleIntelTargetModal(interaction);
+    if (id === 'intel:attacker_submit') return await handleIntelAttackerModal(interaction);
     return await notImplemented(interaction);
   } catch (err) {
     logger.error('Modal error [%s]:', id, err);
