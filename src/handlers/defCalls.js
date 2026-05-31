@@ -10,20 +10,18 @@ import { discordTimestamp, formatDeadline, parseDeadline } from '../utils/time.j
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getDefRoleMention } from '../utils/role.js';
-import { avgWaveGapSec, defValue } from '../utils/defMath.js';
+import { defValue } from '../utils/defMath.js';
 import { isLeadershipOrCoord } from '../utils/tier.js';
 import { registerRenderer, refreshCall } from './calls.js';
 import { COMBAT_CONFIG } from './combat.js';
 import { rebuildDashboard } from './intel.js';
 
 function getDefCallsChannelId() {
-  const row = prepare('SELECT channel_id FROM panels WHERE type = ?').get('def-calls');
-  return row?.channel_id ?? null;
+  return prepare('SELECT value FROM config WHERE key=?').get('def_calls_channel_id')?.value ?? null;
 }
 
 function getLeadershipChannelId() {
-  const row = prepare('SELECT channel_id FROM panels WHERE type = ?').get('leadership');
-  return row?.channel_id ?? null;
+  return prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
 }
 
 function progressBar(pct) {
@@ -211,9 +209,9 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
     prepare('UPDATE incoming_reports SET escalated_call_id = ? WHERE id = ?').run(callId, sourceReportId);
     try {
       const reportRow = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(sourceReportId);
-      const reportsPanel = prepare('SELECT channel_id FROM panels WHERE type = ?').get('reports');
-      if (reportRow?.reports_msg_id && reportsPanel) {
-        const ch = await interaction.client.channels.fetch(reportsPanel.channel_id);
+      const reportsChannelId = prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
+      if (reportRow?.reports_msg_id && reportsChannelId) {
+        const ch = await interaction.client.channels.fetch(reportsChannelId);
         const rmsg = await ch.messages.fetch(reportRow.reports_msg_id);
         const { buildReportEmbed, buildReportComponents } = await import('./incomingReports.js');
         await rmsg.edit({ embeds: [buildReportEmbed(reportRow)], components: buildReportComponents(reportRow) });
@@ -371,10 +369,6 @@ export async function handleEscalateActiveButton(interaction) {
   return showEscalateModal(interaction, 'def_active', interaction.customId.split(':')[2]);
 }
 
-export async function handleEscalatePermaButton(interaction) {
-  return showEscalateModal(interaction, 'def_perma', interaction.customId.split(':')[2]);
-}
-
 async function showEscalateModal(interaction, type, reportId) {
   if (!isLeadershipOrCoord(interaction.member)) {
     return interaction.reply({ content: '❌ Leadership / Def Coord only.', ephemeral: true });
@@ -419,12 +413,10 @@ async function showEscalateModal(interaction, type, reportId) {
     .setMaxLength(10);
   modal.addComponents(new ActionRowBuilder().addComponents(troops));
 
-  const gap = avgWaveGapSec(report.wave_spread_sec, report.waves);
   const inbetweenMin = Number(prepare('SELECT value FROM config WHERE key=?').get('inbetween_min_gap_sec')?.value ?? '1');
+  const hasWindow = report.waves > 1 && report.wave_spread_sec != null && report.wave_spread_sec >= inbetweenMin;
   let notesPrefill = '';
-  if (gap != null && gap >= inbetweenMin) {
-    notesPrefill = `Wave gap ~${gap.toFixed(1)}s - in-between def possible`;
-  }
+  if (hasWindow) notesPrefill = `Wave spread ${report.wave_spread_sec}s — in-between def possible`;
 
   const notes = new TextInputBuilder()
     .setCustomId('notes')

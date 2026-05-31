@@ -41,6 +41,16 @@ export async function deployPanel(interaction, type) {
     VALUES (?, ?, ?)
   `).run(channel.id, type, msg.id);
 
+  const CHANNEL_CONFIG_KEYS = {
+    reports:    'reports_channel_id',
+    'def-calls': 'def_calls_channel_id',
+    leadership: 'leadership_channel_id',
+  };
+  if (CHANNEL_CONFIG_KEYS[type]) {
+    prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)')
+      .run(CHANNEL_CONFIG_KEYS[type], channel.id);
+  }
+
   await interaction.editReply({ content: `✅ ${type} panel deployed and pinned.` });
   logger.info(`Panel [${type}] deployed in #${channel.name} (${channel.id})`);
 }

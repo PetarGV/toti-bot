@@ -70,7 +70,7 @@ test('report escalate active button opens a pre-filled def call modal', async ()
   assert.equal(json.custom_id, `combat:create_def_from_report:def_active:${reportId}`);
   assert.equal(componentById(json, 'coords').value, '(-12|34)');
   assert.equal(parseDeadline(componentById(json, 'arrival').value), 1_900_000_000);
-  assert.match(componentById(json, 'notes').value, /Wave gap ~2\.0s/);
+  assert.match(componentById(json, 'notes').value, /Wave spread 6s/);
   assert.match(componentById(json, 'notes').value, /in-between def possible/);
 });
 
@@ -83,6 +83,7 @@ test('from-report def call modal creates call and links the report', async () =>
 
   const reportId = insertReport();
   prepare('INSERT INTO panels (type, channel_id, message_id) VALUES (?, ?, ?)').run('def-calls', 'def-channel', 'panel-msg');
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
 
   const sent = [];
   const guild = {

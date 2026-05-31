@@ -11,7 +11,6 @@ import { discordTimestamp, parseDeadline } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getHomeCoordsString } from './profile.js';
-import { avgWaveGapSec } from '../utils/defMath.js';
 import { classifyAndPersist, cascadeChiefFrom } from './threat.js';
 import { isLeadershipOrCoord } from '../utils/tier.js';
 import { rebuildDashboard } from './intel.js';
@@ -68,13 +67,11 @@ export function buildReportEmbed(row) {
       { name: 'Waves',    value: String(row.waves), inline: true },
     );
 
-  const gap = avgWaveGapSec(row.wave_spread_sec, row.waves);
   if (row.wave_spread_sec != null) {
-    const gapStr = gap != null ? `avg gap ~${gap.toFixed(1)}s` : 'single wave';
-    let line = `⏱️ ${row.waves} waves over ${row.wave_spread_sec}s (${gapStr})`;
     const inbetweenMin = Number(prepare('SELECT value FROM config WHERE key=?').get('inbetween_min_gap_sec')?.value ?? '1');
-    if (gap != null && gap >= inbetweenMin) line += '  🛡️ IN-BETWEEN DEF POSSIBLE';
-    else line += ' — no in-between window';
+    const hasWindow = row.waves > 1 && row.wave_spread_sec >= inbetweenMin;
+    let line = `⏱️ ${row.waves} waves over ${row.wave_spread_sec}s`;
+    if (hasWindow) line += '  🛡️ IN-BETWEEN DEF POSSIBLE';
     embed.addFields({ name: 'Wave timing', value: line, inline: false });
   }
 
@@ -90,16 +87,14 @@ export function buildReportComponents(row) {
   if (row.status === 'dismissed' || row.escalated_call_id) return [];
   const r1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`report:escalate_active:${row.id}`).setStyle(ButtonStyle.Danger).setLabel('Escalate → Active Def').setEmoji('⚔️'),
-    new ButtonBuilder().setCustomId(`report:escalate_perma:${row.id}`).setStyle(ButtonStyle.Primary).setLabel('Escalate → Perma Def').setEmoji('🛡️'),
     new ButtonBuilder().setCustomId(`report:reclassify:${row.id}`).setStyle(ButtonStyle.Secondary).setLabel('Reclassify').setEmoji('🔄'),
     new ButtonBuilder().setCustomId(`report:close:${row.id}`).setStyle(ButtonStyle.Secondary).setLabel('Close').setEmoji('🔒'),
   );
   return [r1];
 }
 
-function getReportsChannelId() {
-  const row = prepare('SELECT channel_id FROM panels WHERE type = ?').get('reports');
-  return row?.channel_id ?? null;
+function getLeadershipChannelId() {
+  return prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
 }
 
 async function getRoleMentionByEnv(guild, envKey) {
@@ -138,9 +133,9 @@ export async function createIncomingReport(interaction, fields) {
   const cascadedIds = cascadeChiefFrom(id);
   const row = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(id);
 
-  const channelId = getReportsChannelId();
+  const channelId = getLeadershipChannelId();
   if (!channelId) {
-    await interaction.reply({ content: '✅ Report saved, but no reports channel is configured. Run `/setup reports` in the reports channel.', ephemeral: true });
+    await interaction.reply({ content: '✅ Report saved, but no leadership channel is configured. Run `/setup leadership` in the leadership channel.', ephemeral: true });
     return id;
   }
 
@@ -178,15 +173,8 @@ export async function createIncomingReport(interaction, fields) {
 
 // ── Entry: panel button report:choose ────────────────────────────────────────
 export async function handleReportChooseButton(interaction) {
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('report:paste').setStyle(ButtonStyle.Secondary).setLabel('Paste from rally point').setEmoji('📋'),
-    new ButtonBuilder().setCustomId('report:manual').setStyle(ButtonStyle.Primary).setLabel('Enter manually').setEmoji('✍️'),
-  );
-  await interaction.reply({
-    content: 'How do you want to file this report?',
-    components: [row],
-    ephemeral: true,
-  });
+  // Manual entry only — paste mode is a stub. Open the modal directly to avoid an extra click.
+  return handleReportManualButton(interaction);
 }
 
 export async function handleReportPasteButton(interaction) {
@@ -279,7 +267,7 @@ export async function handleReclassifySelect(interaction) {
   }
 
   const row = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
-  const channelId = getReportsChannelId();
+  const channelId = getLeadershipChannelId();
   if (row?.reports_msg_id && channelId) {
     try {
       const ch = await interaction.client.channels.fetch(channelId);
@@ -318,7 +306,7 @@ export async function handleReportCloseButton(interaction) {
   }
   prepare("UPDATE incoming_reports SET status = 'dismissed' WHERE id = ?").run(reportId);
   const after = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
-  const channelId = getReportsChannelId();
+  const channelId = getLeadershipChannelId();
   if (after?.reports_msg_id && channelId) {
     try {
       const ch = await interaction.client.channels.fetch(channelId);

@@ -12,7 +12,7 @@ import {
 import { prepare } from '../db/client.js';
 import { formatCoords, parseCoords } from '../utils/coords.js';
 import { discordTimestamp } from '../utils/time.js';
-import { avgWaveGapSec, chebyshev, defValue } from '../utils/defMath.js';
+import { chebyshev, defValue } from '../utils/defMath.js';
 import { isLeadershipOrCoord } from '../utils/tier.js';
 import { logger } from '../utils/logger.js';
 
@@ -161,14 +161,12 @@ export function buildDashboardEmbed({ windowSec = DEFAULT_WINDOW_SEC } = {}) {
   }
 
   const inbetween = reports
-    .filter(report => report.wave_spread_sec != null && report.waves > 1)
-    .map(report => ({ report, gap: avgWaveGapSec(report.wave_spread_sec, report.waves) }))
-    .filter(({ gap }) => gap != null && gap >= inbetweenMin)
-    .sort((a, b) => a.report.first_eta - b.report.first_eta)
+    .filter(r => r.wave_spread_sec != null && r.waves > 1 && r.wave_spread_sec >= inbetweenMin)
+    .sort((a, b) => a.first_eta - b.first_eta)
     .slice(0, 5);
   if (inbetween.length) {
-    const lines = inbetween.map(({ report, gap }) =>
-      `${formatCoords(report.defender_x, report.defender_y)} <- ${formatCoords(report.attacker_x, report.attacker_y)}: ${report.waves} waves over ${report.wave_spread_sec}s (~${gap.toFixed(1)}s gap) — ${discordTimestamp(report.first_eta, 'R')}`
+    const lines = inbetween.map(r =>
+      `${formatCoords(r.defender_x, r.defender_y)} <- ${formatCoords(r.attacker_x, r.attacker_y)}: ${r.waves} waves over ${r.wave_spread_sec}s — ${discordTimestamp(r.first_eta, 'R')}`
     );
     embed.addFields({ name: '⏱️ In-between def opportunities', value: lines.join('\n'), inline: false });
   }
@@ -206,8 +204,7 @@ export function buildDashboardComponents() {
 }
 
 function getLeadershipChannelId() {
-  const row = prepare('SELECT channel_id FROM panels WHERE type = ?').get('leadership');
-  return row?.channel_id ?? null;
+  return prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
 }
 
 export async function rebuildDashboard(client) {
@@ -357,11 +354,11 @@ export async function handleReclassifyCommand(interaction) {
     prepare('UPDATE incoming_reports SET threat_override = ? WHERE id = ?').run(choice, reportId);
   }
   const after = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(reportId);
-  const reportsPanel = prepare('SELECT channel_id FROM panels WHERE type = ?').get('reports');
-  if (after?.reports_msg_id && reportsPanel) {
+  const reportsChannelId = prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
+  if (after?.reports_msg_id && reportsChannelId) {
     try {
       const { buildReportEmbed, buildReportComponents } = await import('./incomingReports.js');
-      const ch = await interaction.client.channels.fetch(reportsPanel.channel_id);
+      const ch = await interaction.client.channels.fetch(reportsChannelId);
       const m = await ch.messages.fetch(after.reports_msg_id);
       await m.edit({ embeds: [buildReportEmbed(after)], components: buildReportComponents(after) });
     } catch (err) { logger.warn('reclassify command re-render skipped:', err.message); }

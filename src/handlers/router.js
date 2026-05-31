@@ -93,7 +93,6 @@ import {
   handleSendDefSubmitModal,
   handleSendDefAddSubmitModal,
   handleEscalateActiveButton,
-  handleEscalatePermaButton,
   handleDefCallFromReportModal,
   handleActiveDefCommand,
   handlePermaDefCommand,
@@ -203,7 +202,6 @@ export async function routeButton(interaction) {
       if (action === 'reclassify')      return await handleReclassifyButton(interaction);
       if (action === 'close')           return await handleReportCloseButton(interaction);
       if (action === 'escalate_active') return await handleEscalateActiveButton(interaction);
-      if (action === 'escalate_perma')  return await handleEscalatePermaButton(interaction);
     }
 
     if (ns === 'call') {
