@@ -3,7 +3,7 @@ import {
 } from 'discord.js';
 import { ROLE_BUTTON_PREFIX, ROLE_RESET_CUSTOM_ID, ROLE_SELECTIONS } from '../utils/roleSelection.js';
 
-export const PANEL_TYPES = ['defense', 'offense', 'resources', 'scout', 'general', 'roles', 'timer', 'reports', 'def-calls', 'leadership'];
+export const PANEL_TYPES = ['offense', 'resources', 'scout', 'general', 'roles', 'timer', 'reports', 'def-calls', 'leadership'];
 
 const COLOR = {
   defense:     0xe74c3c,
@@ -65,7 +65,6 @@ export function buildPanel(type) {
 }
 
 const titles = {
-  defense:   '🛡️ Defense Operations',
   offense:   '⚔️ Offense Operations',
   resources: '📦 Resource Push',
   scout:     '🔍 Scouting & Intel',
@@ -78,7 +77,6 @@ const titles = {
 };
 
 const descriptions = {
-  defense:   'Call for defense, request reinforcements, or escalate to URGENT for critical attacks.',
   offense:   'Coordinate offensive operations. Look up targets and post offense calls.',
   resources: 'Request resource pushes from alliance members. Select the resource type to get started.',
   scout:     'Request scouts, look up villages, or report enemy sightings.',
@@ -105,17 +103,6 @@ const footers = {
 };
 
 const rowBuilders = {
-  defense: () => [
-    new ActionRowBuilder().addComponents(
-      btn('call:defense', 'Defense Call', '🛡️', ButtonStyle.Danger),
-      btn('call:urgent',  'URGENT',       '🚨', ButtonStyle.Danger),
-      btn('call:reinforce', 'Reinforce',  '🤝'),
-    ),
-    new ActionRowBuilder().addComponents(
-      btn('panel:calls',    'Active Calls', '📋'),
-    ),
-  ],
-
   offense: () => [
     new ActionRowBuilder().addComponents(
       btn('call:offense', 'Offense Call', '⚔️', ButtonStyle.Danger),

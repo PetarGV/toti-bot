@@ -219,4 +219,16 @@ export function runMigrations() {
     try { prepare('INSERT OR IGNORE INTO config (key, value) VALUES (?, ?)').run(key, value); }
     catch (err) { logger.warn(`Migration config seed ${key} skipped:`, err.message); }
   }
+
+  // One-shot: rename existing 'defense' panels and open defense calls.
+  try {
+    const flag = prepare('SELECT value FROM config WHERE key=?').get('migrated_defense_to_def_calls');
+    if (!flag) {
+      exec("UPDATE panels SET type='def-calls' WHERE type='defense'");
+      exec("UPDATE calls  SET type='def_active' WHERE type='defense' AND status='open'");
+      prepare('INSERT INTO config (key, value) VALUES (?, ?)').run('migrated_defense_to_def_calls', 'true');
+    }
+  } catch (err) {
+    logger.warn('Migration defense → def-calls skipped:', err.message);
+  }
 }
