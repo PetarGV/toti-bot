@@ -152,6 +152,59 @@ export async function handleDefCallButton(interaction) {
   await interaction.showModal(modal);
 }
 
+// Shared call-insertion path: used by direct modal create, escalation modal create,
+// the picker's Create button, the Type-instead modal, and (will be) any future
+// def-call entry. Returns { callId, error }.
+export async function createDefCall(interaction, { type, x, y, deadline, troopsNeeded, notes, sourceReportId }) {
+  const config = COMBAT_CONFIG[type];
+  if (!config) return { error: '❌ Unknown call type.' };
+
+  const channelId = getDefCallsChannelId();
+  if (!channelId) {
+    return { error: '❌ No def-calls channel configured. Run `/setup def-calls` first.' };
+  }
+
+  const payload = JSON.stringify({ troops_needed: troopsNeeded, notes: notes ?? null, source_report_id: sourceReportId ?? null });
+
+  const result = prepare(`
+    INSERT INTO calls (type, author_id, x, y, deadline, channel_id, status, payload)
+    VALUES (?, ?, ?, ?, ?, ?, 'open', ?)
+  `).run(type, interaction.user.id, x, y, deadline, channelId, payload);
+  const callId = result.lastInsertRowid;
+  inc('callsCreated');
+
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  const channel = await interaction.client.channels.fetch(channelId);
+  const mention = await getDefRoleMention(channel.guild);
+  const msg = await channel.send({
+    content: mention || '',
+    embeds: [buildDefCallEmbed(call, [])],
+    components: buildDefCallComponents(call),
+    allowedMentions: { parse: ['roles'] },
+  });
+  prepare('UPDATE calls SET message_id = ? WHERE id = ?').run(msg.id, callId);
+
+  // If escalated from a report, patch the report and re-render it.
+  if (sourceReportId) {
+    prepare('UPDATE incoming_reports SET escalated_call_id = ? WHERE id = ?').run(callId, sourceReportId);
+    try {
+      const reportRow = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(sourceReportId);
+      const reportsChannelId = prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
+      if (reportRow?.reports_msg_id && reportsChannelId) {
+        const ch = await interaction.client.channels.fetch(reportsChannelId);
+        const rmsg = await ch.messages.fetch(reportRow.reports_msg_id);
+        const { buildReportEmbed, buildReportComponents } = await import('./incomingReports.js');
+        await rmsg.edit({ embeds: [buildReportEmbed(reportRow)], components: buildReportComponents(reportRow) });
+      }
+    } catch (err) {
+      logger.warn('report → call link re-render skipped:', err.message);
+    }
+  }
+
+  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild:', err.message));
+  return { callId };
+}
+
 // ── Modal submit: combat:create_def:<type> ───────────────────────────────────
 export async function handleDefCallCreateModal(interaction, sourceReportId = null) {
   if (!isLeadershipOrCoord(interaction.member)) {
