@@ -6,7 +6,7 @@ import {
 import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl, rallyUrl } from '../utils/travianUrl.js';
-import { discordTimestamp, formatDeadline, parseDeadline } from '../utils/time.js';
+import { discordTimestamp, parseDeadline } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getDefRoleMention } from '../utils/role.js';
@@ -140,12 +140,8 @@ export async function handleDefCallButton(interaction) {
   const troops = new TextInputBuilder().setCustomId('troops_needed').setLabel('Troops needed (def value)').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('e.g. 15000').setMaxLength(10);
   const notes  = new TextInputBuilder().setCustomId('notes').setLabel('Notes').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500);
 
-  modal.addComponents(new ActionRowBuilder().addComponents(coords));
-  if (!config.noDeadline) {
-    const arrival = new TextInputBuilder().setCustomId('arrival').setLabel('Impact time (UTC)').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('14:30:45 · in 2h30m · 2026-05-30 14:30:45').setMaxLength(30);
-    modal.addComponents(new ActionRowBuilder().addComponents(arrival));
-  }
   modal.addComponents(
+    new ActionRowBuilder().addComponents(coords),
     new ActionRowBuilder().addComponents(troops),
     new ActionRowBuilder().addComponents(notes),
   );
@@ -218,12 +214,6 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
   const coords = parseCoords(coordsStr);
   if (!coords) return interaction.reply({ content: `❌ Invalid coords: \`${coordsStr}\``, ephemeral: true });
 
-  let arrival = null;
-  if (!config.noDeadline) {
-    arrival = parseDeadline(interaction.fields.getTextInputValue('arrival'));
-    if (!arrival) return interaction.reply({ content: '❌ Invalid impact time.', ephemeral: true });
-  }
-
   const troopsStr = interaction.fields.getTextInputValue('troops_needed').trim().replace(/[, ]/g, '');
   const troopsNeeded = parseInt(troopsStr, 10);
   if (!Number.isInteger(troopsNeeded) || troopsNeeded < 1 || troopsNeeded > 10_000_000) {
@@ -231,52 +221,34 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
   }
 
   const notes = interaction.fields.getTextInputValue('notes') || null;
-  const payload = JSON.stringify({ troops_needed: troopsNeeded, notes, source_report_id: sourceReportId });
 
-  const channelId = getDefCallsChannelId();
-  if (!channelId) {
-    return interaction.reply({ content: '❌ No def-calls channel configured. Run `/setup def-calls` first.', ephemeral: true });
+  // def_perma has no deadline — create directly, no picker.
+  if (config.noDeadline) {
+    const { callId, error } = await createDefCall(interaction, {
+      type, x: coords.x, y: coords.y, deadline: null, troopsNeeded, notes, sourceReportId,
+    });
+    if (error) return interaction.reply({ content: error, ephemeral: true });
+    return interaction.reply({ content: `✅ Call #${callId} posted.`, ephemeral: true });
   }
 
-  const result = prepare(`
-    INSERT INTO calls (type, author_id, x, y, deadline, channel_id, status, payload)
-    VALUES (?, ?, ?, ?, ?, ?, 'open', ?)
-  `).run(type, interaction.user.id, coords.x, coords.y, arrival, channelId, payload);
-  const callId = result.lastInsertRowid;
-  inc('callsCreated');
+  // def_active: stash state, reply with picker page 1.
+  const reportFirstEta = sourceReportId
+    ? prepare('SELECT first_eta FROM incoming_reports WHERE id = ?').get(sourceReportId)?.first_eta ?? null
+    : null;
 
-  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
-  const channel = await interaction.client.channels.fetch(channelId);
-  const mention = await getDefRoleMention(channel.guild);
-
-  const msg = await channel.send({
-    content: mention || '',
-    embeds: [buildDefCallEmbed(call, [])],
-    components: buildDefCallComponents(call),
-    allowedMentions: { parse: ['roles'] },
-  });
-  prepare('UPDATE calls SET message_id = ? WHERE id = ?').run(msg.id, callId);
-
-  // If escalated from a report, patch the report and re-render it.
-  if (sourceReportId) {
-    prepare('UPDATE incoming_reports SET escalated_call_id = ? WHERE id = ?').run(callId, sourceReportId);
-    try {
-      const reportRow = prepare('SELECT * FROM incoming_reports WHERE id = ?').get(sourceReportId);
-      const reportsChannelId = prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
-      if (reportRow?.reports_msg_id && reportsChannelId) {
-        const ch = await interaction.client.channels.fetch(reportsChannelId);
-        const rmsg = await ch.messages.fetch(reportRow.reports_msg_id);
-        const { buildReportEmbed, buildReportComponents } = await import('./incomingReports.js');
-        await rmsg.edit({ embeds: [buildReportEmbed(reportRow)], components: buildReportComponents(reportRow) });
-      }
-    } catch (err) {
-      logger.warn('report → call link re-render skipped:', err.message);
-    }
-  }
-
-  await interaction.reply({ content: `✅ Call #${callId} posted.`, ephemeral: true });
-  rebuildDashboard(interaction.client).catch(err => logger.warn('intel rebuild:', err.message));
-  return callId;
+  const picker = await import('./defCallPicker.js');
+  const sent = await interaction.reply({ content: 'Building picker…', ephemeral: true, fetchReply: true });
+  const msgId = sent.id;
+  const state = {
+    type, x: coords.x, y: coords.y, troopsNeeded, notes, sourceReportId,
+    reportFirstEta,
+    dateOffset: null, hour: null, mt: null, mo: null, st: null, so: null,
+    createdAt: Date.now(),
+  };
+  picker._setPickerStateForTests(msgId, state);
+  const payload = picker.buildPickerPage1(msgId, state);
+  await interaction.editReply({ content: payload.content, components: payload.components });
+  return sent.id;
 }
 
 // ── combat:send_def:<callId> — first-time pledge opens modal; repeat shows Edit/Add ─
@@ -445,17 +417,6 @@ async function showEscalateModal(interaction, type, reportId) {
     .setValue(formatCoords(report.defender_x, report.defender_y))
     .setMaxLength(20);
   modal.addComponents(new ActionRowBuilder().addComponents(coords));
-
-  if (!config.noDeadline) {
-    const arrival = new TextInputBuilder()
-      .setCustomId('arrival')
-      .setLabel('Impact time (UTC)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setValue(formatDeadline(report.first_eta))
-      .setMaxLength(30);
-    modal.addComponents(new ActionRowBuilder().addComponents(arrival));
-  }
 
   const troops = new TextInputBuilder()
     .setCustomId('troops_needed')
