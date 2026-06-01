@@ -239,6 +239,13 @@ export async function routeButton(interaction) {
         if (id.split(':')[3] === 'next') return await handleCombatPickContinueButton(interaction);
         return await handleCombatPickButton(interaction);
       }
+      if (action === 'newpick') {
+        const sub = id.split(':')[2];
+        if (sub === 'type_instead')   return await handlePickerTypeInsteadButton(interaction);
+        if (sub === 'next')           return await handlePickerNextButton(interaction);
+        if (sub === 'back')           return await handlePickerBackButton(interaction);
+        if (sub === 'create')         return await handlePickerCreateButton(interaction);
+      }
     }
 
     if (ns === 'scout') {

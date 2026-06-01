@@ -181,18 +181,69 @@ export async function handlePickerSelect(interaction) {
 }
 
 export function buildPickerPage2(msgId, state) {
-  // Implemented in Task 11 — temporarily mirrors page 1.
-  return buildPickerPage1(msgId, state);
+  const content = `Seconds (UTC) — currently: \`${buildHeaderText({ ...state, st: state.st ?? 0, so: state.so ?? 0 })}\`\n_Tip: leave both seconds selects unpicked for :00._`;
+
+  const stSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:newpick:st:${msgId}`)
+    .setPlaceholder(state.st == null ? 'Second tens (0–5)' : `Sec tens: ${state.st}`)
+    .addOptions([0, 1, 2, 3, 4, 5].map(v => ({ label: String(v), value: String(v), default: state.st === v })));
+
+  const soSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:newpick:so:${msgId}`)
+    .setPlaceholder(state.so == null ? 'Second ones (0–9)' : `Sec ones: ${state.so}`)
+    .addOptions(Array.from({ length: 10 }, (_, v) => ({ label: String(v), value: String(v), default: state.so === v })));
+
+  const backBtn = new ButtonBuilder()
+    .setCustomId(`combat:newpick:back:${msgId}`)
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel('← Back');
+
+  const createBtn = new ButtonBuilder()
+    .setCustomId(`combat:newpick:create:${msgId}`)
+    .setStyle(ButtonStyle.Success)
+    .setLabel('Create call')
+    .setEmoji('✅');
+
+  return {
+    content,
+    ephemeral: true,
+    components: [
+      new ActionRowBuilder().addComponents(stSelect),
+      new ActionRowBuilder().addComponents(soSelect),
+      new ActionRowBuilder().addComponents(backBtn, createBtn),
+    ],
+  };
 }
 
 export async function handlePickerTypeInsteadButton(interaction) {
   return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
 }
 export async function handlePickerNextButton(interaction) {
-  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+  const msgId = _parseMsgId(interaction.customId);
+  const state = pickerState.get(msgId);
+  if (await _expiredOrMissing(interaction, state)) return;
+
+  // Require page-1 components to all be picked before advancing.
+  if (state.dateOffset == null || state.hour == null || state.mt == null || state.mo == null) {
+    return interaction.reply({
+      content: '❌ Pick date, hour, and minutes first.',
+      ephemeral: true,
+    });
+  }
+
+  state._page = 2;
+  const payload = buildPickerPage2(msgId, state);
+  await interaction.update({ content: payload.content, components: payload.components });
 }
+
 export async function handlePickerBackButton(interaction) {
-  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+  const msgId = _parseMsgId(interaction.customId);
+  const state = pickerState.get(msgId);
+  if (await _expiredOrMissing(interaction, state)) return;
+
+  state._page = 1;
+  const payload = buildPickerPage1(msgId, state);
+  await interaction.update({ content: payload.content, components: payload.components });
 }
 export async function handlePickerCreateButton(interaction) {
   return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });

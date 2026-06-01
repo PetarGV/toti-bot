@@ -100,3 +100,48 @@ test('handlePickerSelect: expired state returns friendly error', async () => {
   assert.equal(interaction._updated.components.length, 0);
   assert.match(interaction._updated.content, /expired/i);
 });
+
+import { handlePickerNextButton, handlePickerBackButton, buildPickerPage2 } from '../src/handlers/defCallPicker.js';
+
+function fakeButtonInteraction(customId) {
+  return {
+    customId,
+    update: async function (payload) { this._updated = payload; },
+    reply: async function (payload) { this._replied = payload; },
+  };
+}
+
+test('buildPickerPage2: emits 3 action rows', () => {
+  const payload = buildPickerPage2('msg-1', { st: null, so: null });
+  assert.equal(payload.components.length, 3);
+  assert.equal(payload.ephemeral, true);
+  assert.match(payload.content, /Seconds/);
+});
+
+test('handlePickerNextButton: blocked when page-1 incomplete', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-N1', { dateOffset: 0, hour: 14, mt: null, mo: null, createdAt: Date.now() });
+  const interaction = fakeButtonInteraction('combat:newpick:next:msg-N1');
+  await handlePickerNextButton(interaction);
+  assert.ok(interaction._replied);
+  assert.match(interaction._replied.content, /Pick date, hour, and minutes/);
+});
+
+test('handlePickerNextButton: advances to page 2 when complete', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-N2', { dateOffset: 0, hour: 14, mt: 3, mo: 0, st: null, so: null, createdAt: Date.now() });
+  const interaction = fakeButtonInteraction('combat:newpick:next:msg-N2');
+  await handlePickerNextButton(interaction);
+  assert.equal(_getPickerStateForTests('msg-N2')._page, 2);
+  assert.equal(interaction._updated.components.length, 3);
+  assert.match(interaction._updated.content, /Seconds/);
+});
+
+test('handlePickerBackButton: returns to page 1', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-B1', { dateOffset: 0, hour: 14, mt: 3, mo: 0, st: 4, so: 5, _page: 2, createdAt: Date.now() });
+  const interaction = fakeButtonInteraction('combat:newpick:back:msg-B1');
+  await handlePickerBackButton(interaction);
+  assert.equal(_getPickerStateForTests('msg-B1')._page, 1);
+  assert.equal(interaction._updated.components.length, 5);
+});
