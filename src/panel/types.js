@@ -3,7 +3,7 @@ import {
 } from 'discord.js';
 import { ROLE_BUTTON_PREFIX, ROLE_RESET_CUSTOM_ID, ROLE_SELECTIONS } from '../utils/roleSelection.js';
 
-export const PANEL_TYPES = ['offense', 'resources', 'scout', 'general', 'roles', 'timer', 'reports', 'def-calls', 'leadership'];
+export const PANEL_TYPES = ['offense', 'resources', 'scout', 'general', 'roles', 'timer', 'reports', 'leadership'];
 
 const COLOR = {
   defense:     0xe74c3c,
@@ -13,9 +13,8 @@ const COLOR = {
   general:     0x9b59b6,
   roles:       0x5865f2,
   timer:       0xf1c40f,
-  reports:     0xe67e22,
-  'def-calls': 0xe74c3c,
-  leadership:  0x1abc9c,
+  reports:    0xe67e22,
+  leadership: 0x1abc9c,
 };
 
 function btn(customId, label, emoji, style = ButtonStyle.Secondary) {
@@ -71,9 +70,8 @@ const titles = {
   general:   '📊 Status & Overview',
   roles:     'Choose Your Crew Role',
   timer:       '⏱️ Timer Control',
-  reports:     '📥 Incoming Attack Reports',
-  'def-calls': '🛡️ Defense Calls',
-  leadership:  '🧠 Leadership Intel',
+  reports:    '📥 Incoming Attack Reports',
+  leadership: '🧠 Leadership Intel',
 };
 
 const descriptions = {
@@ -92,9 +90,8 @@ const descriptions = {
     'Pause keeps the time left in the current cycle; Resume picks up from there. Stop clears your timer.',
     '*Your timer is private — clicks reply only to you.*',
   ].join('\n'),
-  reports:     'Report incoming attacks. Leadership + Defense Coordinator will be pinged automatically.',
-  'def-calls': 'Active and Perma Def calls. Members respond with Sending Def. Buttons restricted to Leadership / Defense Coordinator.',
-  leadership:  'Pinned intelligence dashboard. Drill down by target or attacker, widen the time window, or refresh.',
+  reports:    'Report incoming attacks. Leadership + Defense Coordinator will be pinged automatically.',
+  leadership: 'Pinned intelligence dashboard. Drill down by target or attacker, widen the time window, or refresh. Leadership / Def Coord can post Active Def and Perma Def calls directly from here.',
 };
 
 const footers = {
@@ -172,22 +169,16 @@ const rowBuilders = {
     ),
   ],
 
-  'def-calls': () => [
-    new ActionRowBuilder().addComponents(
-      btn('call:def_active', 'Active Def', '🛡️', ButtonStyle.Danger),
-      btn('call:def_perma',  'Perma Def',  '🛡️', ButtonStyle.Primary),
-    ),
-    new ActionRowBuilder().addComponents(
-      btn('panel:calls', 'Active Calls', '📋'),
-    ),
-  ],
-
   leadership: () => [
     new ActionRowBuilder().addComponents(
       btn('intel:refresh',  'Refresh',             '🔄', ButtonStyle.Secondary),
       btn('intel:target',   'Target drill-down',   '🎯', ButtonStyle.Secondary),
       btn('intel:attacker', 'Attacker drill-down', '⚔️', ButtonStyle.Secondary),
       btn('intel:window',   'Wider window',        '📅', ButtonStyle.Secondary),
+    ),
+    new ActionRowBuilder().addComponents(
+      btn('intel:create_def_active', 'Active Def', '🛡️', ButtonStyle.Primary),
+      btn('intel:create_def_perma',  'Perma Def',  '🛡️', ButtonStyle.Primary),
     ),
   ],
 };

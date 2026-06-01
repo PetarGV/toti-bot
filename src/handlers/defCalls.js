@@ -17,7 +17,9 @@ import { COMBAT_CONFIG } from './combat.js';
 import { rebuildDashboard } from './intel.js';
 
 function getDefCallsChannelId() {
-  return prepare('SELECT value FROM config WHERE key=?').get('def_calls_channel_id')?.value ?? null;
+  return prepare('SELECT value FROM config WHERE key=?').get('def_calls_channel_id')?.value
+    ?? prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value
+    ?? null;
 }
 
 function getLeadershipChannelId() {
@@ -157,7 +159,7 @@ export async function createDefCall(interaction, { type, x, y, deadline, troopsN
 
   const channelId = getDefCallsChannelId();
   if (!channelId) {
-    return { error: '❌ No def-calls channel configured. Run `/setup def-calls` first.' };
+    return { error: '❌ No leadership channel configured. Run `/setup leadership` first.' };
   }
 
   const payload = JSON.stringify({ troops_needed: troopsNeeded, notes: notes ?? null, source_report_id: sourceReportId ?? null });

@@ -8,7 +8,6 @@ export const commandDefinitions = [
     .setDescription('Post a pinned panel in this channel (admin only)')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
     .addSubcommand(s => s.setName('reports').setDescription('Incoming attack reports panel'))
-    .addSubcommand(s => s.setName('def-calls').setDescription('Active/Perma Def calls panel (leadership-gated)'))
     .addSubcommand(s => s.setName('leadership').setDescription('Intel dashboard panel (leadership channel)'))
     .addSubcommand(s => s.setName('offense').setDescription('Offense operations panel'))
     .addSubcommand(s => s.setName('scout').setDescription('Scouting & intel panel'))

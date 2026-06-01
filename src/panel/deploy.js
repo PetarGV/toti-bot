@@ -43,7 +43,6 @@ export async function deployPanel(interaction, type) {
 
   const CHANNEL_CONFIG_KEYS = {
     reports:    'reports_channel_id',
-    'def-calls': 'def_calls_channel_id',
     leadership: 'leadership_channel_id',
   };
   if (CHANNEL_CONFIG_KEYS[type]) {
