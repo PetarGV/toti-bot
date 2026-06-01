@@ -87,3 +87,39 @@ test('parseDeadline: 10-digit unix seconds boundary', () => {
   // 1000000000 → 2001-09-09T01:46:40Z — the first 10-digit unix.
   assert.equal(parseDeadline('1000000000'), 1_000_000_000);
 });
+
+import { routeAutocomplete } from '../src/handlers/router.js';
+
+test('routeAutocomplete: /active-def arrival returns time-offset suggestions', async () => {
+  const responded = [];
+  const interaction = {
+    isAutocomplete: () => true,
+    commandName: 'active-def',
+    options: { getFocused: () => '' },
+    respond: async (choices) => { responded.push(choices); },
+  };
+  await routeAutocomplete(interaction);
+  assert.equal(responded.length, 1);
+  const choices = responded[0];
+  assert.ok(choices.length > 0, 'expected suggestions');
+  assert.ok(choices.length <= 25, 'expected ≤25 suggestions');
+  for (const c of choices) {
+    assert.ok(typeof c.name === 'string' && c.name.length <= 100);
+    assert.ok(typeof c.value === 'string');
+    assert.match(c.value, /^in /);
+  }
+});
+
+test('routeAutocomplete: filters by focused substring', async () => {
+  const responded = [];
+  const interaction = {
+    isAutocomplete: () => true,
+    commandName: 'active-def',
+    options: { getFocused: () => '24' },
+    respond: async (choices) => { responded.push(choices); },
+  };
+  await routeAutocomplete(interaction);
+  const choices = responded[0];
+  assert.ok(choices.length >= 1);
+  assert.ok(choices.every(c => c.name.toLowerCase().includes('24')));
+});

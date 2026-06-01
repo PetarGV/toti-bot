@@ -162,7 +162,7 @@ export const commandDefinitions = [
     .setDescription('Post an Active Def call (leadership only)')
     .addStringOption(o => o.setName('coords').setDescription('Defender coordinates').setRequired(true))
     .addIntegerOption(o => o.setName('troops_needed').setDescription('Required def value').setRequired(true).setMinValue(1))
-    .addStringOption(o => o.setName('arrival').setDescription('Impact time (UTC)').setRequired(true))
+    .addStringOption(o => o.setName('arrival').setDescription('Impact time (UTC) — type or pick a suggestion').setRequired(true).setAutocomplete(true))
     .addStringOption(o => o.setName('notes').setDescription('Notes').setRequired(false)),
 
   new SlashCommandBuilder()

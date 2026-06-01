@@ -322,8 +322,32 @@ export async function routeModal(interaction) {
 }
 
 // ── Autocomplete router ──────────────────────────────────────────────────────
+function _padUtc(n) { return String(n).padStart(2, '0'); }
+function _fmtUtc(d) {
+  return `${d.getUTCFullYear()}-${_padUtc(d.getUTCMonth() + 1)}-${_padUtc(d.getUTCDate())} ${_padUtc(d.getUTCHours())}:${_padUtc(d.getUTCMinutes())}:${_padUtc(d.getUTCSeconds())}`;
+}
+
 async function handleActiveDefArrivalAutocomplete(interaction) {
-  await interaction.respond([]);
+  const focused = interaction.options.getFocused() ?? '';
+  const now = new Date();
+  const offsets = [
+    ['in 30m',  30 * 60_000],
+    ['in 1h',   60 * 60_000],
+    ['in 2h',   2 * 60 * 60_000],
+    ['in 3h',   3 * 60 * 60_000],
+    ['in 6h',   6 * 60 * 60_000],
+    ['in 12h',  12 * 60 * 60_000],
+    ['in 24h',  24 * 60 * 60_000],
+  ];
+  const suggestions = offsets.map(([label, ms]) => {
+    const fullName = `${label}  →  ${_fmtUtc(new Date(now.getTime() + ms))} UTC`;
+    return { name: fullName.slice(0, 100), value: label };
+  });
+  const q = focused.toLowerCase();
+  const filtered = q
+    ? suggestions.filter(s => s.name.toLowerCase().includes(q))
+    : suggestions;
+  await interaction.respond(filtered.slice(0, 25));
 }
 
 export async function routeAutocomplete(interaction) {
