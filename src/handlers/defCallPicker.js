@@ -6,9 +6,7 @@ import {
   StringSelectMenuBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
   ModalBuilder, TextInputBuilder, TextInputStyle,
 } from 'discord.js';
-import { logger } from '../utils/logger.js';
 import { parseDeadline, formatDeadline, unixNow } from '../utils/time.js';
-import { isLeadershipOrCoord } from '../utils/tier.js';
 import { createDefCall } from './defCalls.js';
 
 // In-memory state, keyed by the ephemeral message ID. See spec for rationale
