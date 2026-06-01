@@ -1,10 +1,17 @@
 import { logger } from './logger.js';
+import { ROLE_SELECTIONS } from './roleSelection.js';
 
 // Per-guild cache: guildId → roleId | null
 const cache = new Map();
 
+// Name of the role to ping on new def calls.
+// Env var overrides; falls back to the 'def' crew role name from ROLE_SELECTIONS.
+const DEF_ROLE_NAME = process.env.DEF_ROLE_NAME
+  ?? ROLE_SELECTIONS.find(s => s.value === 'def')?.roleNames[0]
+  ?? 'Def Crew';
+
 /**
- * Returns a role mention string `<@&roleId>` for the configured def-crew role,
+ * Returns a role mention string `<@&roleId>` for the def-crew role,
  * or null if the role is not found. Result is cached per guild.
  * @param {import('discord.js').Guild} guild
  * @returns {Promise<string|null>}
@@ -15,11 +22,7 @@ export async function getDefRoleMention(guild) {
     return roleId ? `<@&${roleId}>` : null;
   }
 
-  const roleName = process.env.DEF_ROLE_NAME;
-  if (!roleName) {
-    cache.set(guild.id, null);
-    return null;
-  }
+  const roleName = DEF_ROLE_NAME;
 
   // Try guild.roles.cache first
   let role = guild.roles.cache.find(r => r.name.toLowerCase() === roleName.toLowerCase());
