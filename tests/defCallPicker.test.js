@@ -179,6 +179,7 @@ test('handlePickerSelect: so on page 2 updates state', async () => {
 });
 
 import { handlePickerCreateButton } from '../src/handlers/defCallPicker.js';
+import { handlePickerTypeInsteadButton, handlePickerTypeInsteadSubmit } from '../src/handlers/defCallPicker.js';
 import { setupTestDb, resetTables } from './helpers/testDb.js';
 import { prepare } from '../src/db/client.js';
 
@@ -254,4 +255,69 @@ test('handlePickerCreateButton: creates call on full state', async () => {
   assert.equal(call.y, 34);
   assert.match(interaction._updated.content, /Call #\d+ posted/);
   assert.equal(_getPickerStateForTests('msg-C3'), undefined, 'state should be reaped');
+});
+
+test('handlePickerTypeInsteadButton: shows modal with parser-friendly placeholder', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-T1', { type: 'def_active', createdAt: Date.now() });
+  let shown = null;
+  const interaction = {
+    customId: 'combat:newpick:type_instead:msg-T1',
+    showModal: async (m) => { shown = m; },
+  };
+  await handlePickerTypeInsteadButton(interaction);
+  assert.ok(shown, 'expected a modal');
+  const json = shown.toJSON();
+  assert.equal(json.custom_id, 'combat:newpick:type_instead_submit:msg-T1');
+});
+
+test('handlePickerTypeInsteadButton: pre-fills from reportFirstEta', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-T2', { type: 'def_active', reportFirstEta: 1_900_000_000, createdAt: Date.now() });
+  let shown = null;
+  const interaction = {
+    customId: 'combat:newpick:type_instead:msg-T2',
+    showModal: async (m) => { shown = m; },
+  };
+  await handlePickerTypeInsteadButton(interaction);
+  const json = shown.toJSON();
+  const arrival = json.components.flatMap(r => r.components).find(c => c.custom_id === 'arrival');
+  assert.equal(arrival.value, '2030-03-17 17:46:40');
+});
+
+test('handlePickerTypeInsteadSubmit: parses + creates call', async () => {
+  await setupTestDb();
+  resetTables();
+  _resetPickerStateForTests();
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
+  _setPickerStateForTests('msg-T3', {
+    type: 'def_active', x: 10, y: 20, troopsNeeded: 999, notes: null, sourceReportId: null,
+    createdAt: Date.now(),
+  });
+  const guild = { id: 'g', roles: { cache: { find: () => null }, fetch: async () => ({ find: () => null }) } };
+  const futureIso = new Date(Date.now() + 3600_000).toISOString();
+  const interaction = {
+    customId: 'combat:newpick:type_instead_submit:msg-T3',
+    user: { id: 'coord-1' },
+    guild,
+    fields: { getTextInputValue: () => futureIso },
+    client: { channels: { fetch: async () => ({ guild, send: async () => ({ id: 'sent-1' }) }) } },
+    reply: async function (p) { this._replied = p; },
+  };
+  await handlePickerTypeInsteadSubmit(interaction);
+  const call = prepare('SELECT * FROM calls WHERE type = ?').get('def_active');
+  assert.ok(call);
+  assert.match(interaction._replied.content, /Call #\d+ posted/);
+});
+
+test('handlePickerTypeInsteadSubmit: rejects unparseable', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-T4', { type: 'def_active', createdAt: Date.now() });
+  const interaction = {
+    customId: 'combat:newpick:type_instead_submit:msg-T4',
+    fields: { getTextInputValue: () => 'xyzzy not a date' },
+    reply: async function (p) { this._replied = p; },
+  };
+  await handlePickerTypeInsteadSubmit(interaction);
+  assert.match(interaction._replied.content, /Could not parse/);
 });

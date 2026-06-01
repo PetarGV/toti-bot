@@ -216,7 +216,28 @@ export function buildPickerPage2(msgId, state) {
 }
 
 export async function handlePickerTypeInsteadButton(interaction) {
-  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+  const msgId = _parseMsgId(interaction.customId);
+  const state = pickerState.get(msgId);
+  if (await _expiredOrMissing(interaction, state)) return;
+
+  const modal = new ModalBuilder()
+    .setCustomId(`combat:newpick:type_instead_submit:${msgId}`)
+    .setTitle('Impact time (UTC)');
+
+  const arrival = new TextInputBuilder()
+    .setCustomId('arrival')
+    .setLabel('Impact time (UTC)')
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true)
+    .setPlaceholder('14:30:45 · in 2h30m · 2030-06-01 10:00:01')
+    .setMaxLength(60);
+
+  if (state.reportFirstEta) {
+    arrival.setValue(formatDeadline(state.reportFirstEta));
+  }
+
+  modal.addComponents(new ActionRowBuilder().addComponents(arrival));
+  await interaction.showModal(modal);
 }
 export async function handlePickerNextButton(interaction) {
   const msgId = _parseMsgId(interaction.customId);
@@ -285,5 +306,44 @@ export async function handlePickerCreateButton(interaction) {
   });
 }
 export async function handlePickerTypeInsteadSubmit(interaction) {
-  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+  const msgId = _parseMsgId(interaction.customId);
+  const state = pickerState.get(msgId);
+  if (!state) {
+    return interaction.reply({
+      content: '⏱️ Picker session expired — please re-open the call.',
+      ephemeral: true,
+    });
+  }
+
+  const raw = interaction.fields.getTextInputValue('arrival');
+  const deadline = parseDeadline(raw);
+  if (deadline == null) {
+    return interaction.reply({
+      content: `❌ Could not parse \`${raw}\`. Try \`14:30:45\`, \`in 2h30m\`, or \`2030-06-01 10:00:01\`.`,
+      ephemeral: true,
+    });
+  }
+  if (deadline < unixNow()) {
+    return interaction.reply({
+      content: '❌ Impact time is in the past.',
+      ephemeral: true,
+    });
+  }
+
+  const { callId, error } = await createDefCall(interaction, {
+    type: state.type,
+    x: state.x,
+    y: state.y,
+    deadline,
+    troopsNeeded: state.troopsNeeded,
+    notes: state.notes,
+    sourceReportId: state.sourceReportId,
+  });
+  if (error) return interaction.reply({ content: error, ephemeral: true });
+
+  pickerState.delete(msgId);
+  await interaction.reply({
+    content: `✅ Call #${callId} posted.`,
+    ephemeral: true,
+  });
 }

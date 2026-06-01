@@ -308,6 +308,7 @@ export async function routeModal(interaction) {
     if (id === 'nearby:lookup')                 return await handleNearbyModalSubmit(interaction);
     if (id.startsWith('push:create:'))          return await handlePushCreateModal(interaction);
     if (id.startsWith('pledge:submit:'))        return await handlePledgeSubmitModal(interaction);
+    if (id.startsWith('combat:newpick:type_instead_submit:')) return await handlePickerTypeInsteadSubmit(interaction);
     if (id.startsWith('combat:create_def_from_report:')) return await handleDefCallFromReportModal(interaction);
     if (id.startsWith('combat:create_def:'))        return await handleDefCallCreateModal(interaction);
     if (id.startsWith('combat:send_def_submit:'))   return await handleSendDefSubmitModal(interaction);
