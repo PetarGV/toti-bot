@@ -1,4 +1,4 @@
-// Two-page ephemeral picker for creating def_active calls.
+// Single-page ephemeral picker for creating def_active calls.
 // Replaces the free-text "arrival" field in the create modals.
 // Custom-ID namespace: combat:newpick:*
 
@@ -53,25 +53,24 @@ export function buildHeaderText(state) {
     ? '____-__-__'
     : utcDateString(state.dateOffset);
   const hourPart = state.hour == null ? '__' : String(state.hour).padStart(2, '0');
-  const minPart = (state.mt == null || state.mo == null) ? '__' : `${state.mt}${state.mo}`;
-  const secPart = (state.st == null || state.so == null) ? '__' : `${state.st}${state.so}`;
-  return `${datePart} ${hourPart}:${minPart}:${secPart}`;
+  const minPart = state.minute == null ? '__' : String(state.minute).padStart(2, '0');
+  const secPart = state.second == null ? '__' : String(state.second).padStart(2, '0');
+  return `${datePart} ${hourPart}:${minPart}:${secPart} UTC`;
 }
 
 // Resolve picker state to a unix timestamp, defaulting missing seconds to 00.
 // Returns null if date/hour/minute components are not all set.
 export function resolveStateToUnix(state) {
-  if (state.dateOffset == null || state.hour == null || state.mt == null || state.mo == null) return null;
+  if (state.dateOffset == null || state.hour == null || state.minute == null) return null;
   const now = new Date();
   const utcMs = Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
     now.getUTCDate() + state.dateOffset,
     state.hour,
-    state.mt * 10 + state.mo,
-    (state.st ?? 0) * 10 + (state.so ?? 0),
+    state.minute,
+    state.second ?? 0,
   );
-  // Callers must validate that the result is in the future (not done here).
   return Math.floor(utcMs / 1000);
 }
 
@@ -81,6 +80,9 @@ function dateLabel(offset) {
   if (offset === 1) return `Tomorrow (${datePart} UTC)`;
   return `Day after (${datePart} UTC)`;
 }
+
+// 5-unit steps keep the option count at 12, well within Discord's 25-option limit.
+const MINUTE_SECOND_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
 
 export function buildPickerPage1(msgId, state) {
   const reportLine = state.reportFirstEta
@@ -102,15 +104,23 @@ export function buildPickerPage1(msgId, state) {
       default: state.hour === h,
     })));
 
-  const mtSelect = new StringSelectMenuBuilder()
-    .setCustomId(`combat:newpick:mt:${msgId}`)
-    .setPlaceholder(state.mt == null ? 'Minute tens (0–5)' : `Min tens: ${state.mt}`)
-    .addOptions([0, 1, 2, 3, 4, 5].map(v => ({ label: String(v), value: String(v), default: state.mt === v })));
+  const minuteSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:newpick:minute:${msgId}`)
+    .setPlaceholder(state.minute == null ? 'Minute (UTC)' : `Min: ${String(state.minute).padStart(2, '0')}`)
+    .addOptions(MINUTE_SECOND_STEPS.map(v => ({
+      label: String(v).padStart(2, '0'),
+      value: String(v),
+      default: state.minute === v,
+    })));
 
-  const moSelect = new StringSelectMenuBuilder()
-    .setCustomId(`combat:newpick:mo:${msgId}`)
-    .setPlaceholder(state.mo == null ? 'Minute ones (0–9)' : `Min ones: ${state.mo}`)
-    .addOptions(Array.from({ length: 10 }, (_, v) => ({ label: String(v), value: String(v), default: state.mo === v })));
+  const secondSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:newpick:second:${msgId}`)
+    .setPlaceholder(state.second == null ? 'Second (or skip for :00)' : `Sec: ${String(state.second).padStart(2, '0')}`)
+    .addOptions(MINUTE_SECOND_STEPS.map(v => ({
+      label: String(v).padStart(2, '0'),
+      value: String(v),
+      default: state.second === v,
+    })));
 
   const typeBtn = new ButtonBuilder()
     .setCustomId(`combat:newpick:type_instead:${msgId}`)
@@ -118,10 +128,11 @@ export function buildPickerPage1(msgId, state) {
     .setLabel('Type instead')
     .setEmoji('⌨️');
 
-  const nextBtn = new ButtonBuilder()
-    .setCustomId(`combat:newpick:next:${msgId}`)
-    .setStyle(ButtonStyle.Primary)
-    .setLabel('Next →');
+  const createBtn = new ButtonBuilder()
+    .setCustomId(`combat:newpick:create:${msgId}`)
+    .setStyle(ButtonStyle.Success)
+    .setLabel('Create call')
+    .setEmoji('✅');
 
   return {
     content,
@@ -129,9 +140,9 @@ export function buildPickerPage1(msgId, state) {
     components: [
       new ActionRowBuilder().addComponents(dateSelect),
       new ActionRowBuilder().addComponents(hourSelect),
-      new ActionRowBuilder().addComponents(mtSelect),
-      new ActionRowBuilder().addComponents(moSelect),
-      new ActionRowBuilder().addComponents(typeBtn, nextBtn),
+      new ActionRowBuilder().addComponents(minuteSelect),
+      new ActionRowBuilder().addComponents(secondSelect),
+      new ActionRowBuilder().addComponents(typeBtn, createBtn),
     ],
   };
 }
@@ -153,64 +164,23 @@ function _expiredOrMissing(interaction, state) {
 
 export async function handlePickerSelect(interaction) {
   const id = interaction.customId;
-  const part = id.split(':')[2];           // 'date' | 'hour' | 'mt' | 'mo' | 'st' | 'so'
+  const part = id.split(':')[2];           // 'date' | 'hour' | 'minute' | 'second'
   const msgId = _parseMsgId(id);
   const state = pickerState.get(msgId);
   if (await _expiredOrMissing(interaction, state)) return;
 
   const value = parseInt(interaction.values[0], 10);
   switch (part) {
-    case 'date': state.dateOffset = value; break;
-    case 'hour': state.hour = value; break;
-    case 'mt':   state.mt = value; break;
-    case 'mo':   state.mo = value; break;
-    case 'st':   state.st = value; break;
-    case 'so':   state.so = value; break;
+    case 'date':   state.dateOffset = value; break;
+    case 'hour':   state.hour = value; break;
+    case 'minute': state.minute = value; break;
+    case 'second': state.second = value; break;
     default:
       return interaction.update({ content: '❌ Unknown picker control.', components: [] });
   }
 
-  // Re-render current page.
-  const onPage2 = state._page === 2;
-  const payload = onPage2
-    ? buildPickerPage2(msgId, state)
-    : buildPickerPage1(msgId, state);
+  const payload = buildPickerPage1(msgId, state);
   await interaction.update({ content: payload.content, components: payload.components });
-}
-
-export function buildPickerPage2(msgId, state) {
-  const content = `Seconds (UTC) — currently: \`${buildHeaderText({ ...state, st: state.st ?? 0, so: state.so ?? 0 })}\`\n_Tip: leave both seconds selects unpicked for :00._`;
-
-  const stSelect = new StringSelectMenuBuilder()
-    .setCustomId(`combat:newpick:st:${msgId}`)
-    .setPlaceholder(state.st == null ? 'Second tens (0–5)' : `Sec tens: ${state.st}`)
-    .addOptions([0, 1, 2, 3, 4, 5].map(v => ({ label: String(v), value: String(v), default: state.st === v })));
-
-  const soSelect = new StringSelectMenuBuilder()
-    .setCustomId(`combat:newpick:so:${msgId}`)
-    .setPlaceholder(state.so == null ? 'Second ones (0–9)' : `Sec ones: ${state.so}`)
-    .addOptions(Array.from({ length: 10 }, (_, v) => ({ label: String(v), value: String(v), default: state.so === v })));
-
-  const backBtn = new ButtonBuilder()
-    .setCustomId(`combat:newpick:back:${msgId}`)
-    .setStyle(ButtonStyle.Secondary)
-    .setLabel('← Back');
-
-  const createBtn = new ButtonBuilder()
-    .setCustomId(`combat:newpick:create:${msgId}`)
-    .setStyle(ButtonStyle.Success)
-    .setLabel('Create call')
-    .setEmoji('✅');
-
-  return {
-    content,
-    ephemeral: true,
-    components: [
-      new ActionRowBuilder().addComponents(stSelect),
-      new ActionRowBuilder().addComponents(soSelect),
-      new ActionRowBuilder().addComponents(backBtn, createBtn),
-    ],
-  };
 }
 
 export async function handlePickerTypeInsteadButton(interaction) {
@@ -237,33 +207,23 @@ export async function handlePickerTypeInsteadButton(interaction) {
   modal.addComponents(new ActionRowBuilder().addComponents(arrival));
   await interaction.showModal(modal);
 }
+
+// Legacy handlers — Next/Back buttons no longer appear in the picker UI.
+// Kept to avoid routing errors from any stale messages still in Discord.
 export async function handlePickerNextButton(interaction) {
-  const msgId = _parseMsgId(interaction.customId);
-  const state = pickerState.get(msgId);
-  if (await _expiredOrMissing(interaction, state)) return;
-
-  // Require page-1 components to all be picked before advancing.
-  if (state.dateOffset == null || state.hour == null || state.mt == null || state.mo == null) {
-    return interaction.reply({
-      content: '❌ Pick date, hour, and minutes first.',
-      ephemeral: true,
-    });
-  }
-
-  state._page = 2;
-  const payload = buildPickerPage2(msgId, state);
-  await interaction.update({ content: payload.content, components: payload.components });
+  return interaction.update({
+    content: '⏱️ Picker session expired — please re-open the call.',
+    components: [],
+  });
 }
 
 export async function handlePickerBackButton(interaction) {
-  const msgId = _parseMsgId(interaction.customId);
-  const state = pickerState.get(msgId);
-  if (await _expiredOrMissing(interaction, state)) return;
-
-  state._page = 1;
-  const payload = buildPickerPage1(msgId, state);
-  await interaction.update({ content: payload.content, components: payload.components });
+  return interaction.update({
+    content: '⏱️ Picker session expired — please re-open the call.',
+    components: [],
+  });
 }
+
 export async function handlePickerCreateButton(interaction) {
   const msgId = _parseMsgId(interaction.customId);
   const state = pickerState.get(msgId);
@@ -303,6 +263,7 @@ export async function handlePickerCreateButton(interaction) {
     components: [],
   });
 }
+
 export async function handlePickerTypeInsteadSubmit(interaction) {
   const msgId = _parseMsgId(interaction.customId);
   const state = pickerState.get(msgId);

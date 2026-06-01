@@ -26,17 +26,17 @@ import {
 } from '../src/handlers/defCallPicker.js';
 
 test('buildHeaderText: all unpicked', () => {
-  assert.equal(buildHeaderText({}), '____-__-__ __:__:__');
+  assert.equal(buildHeaderText({}), '____-__-__ __:__:__ UTC');
 });
 
 test('buildHeaderText: partial — date + hour', () => {
   const header = buildHeaderText({ dateOffset: 0, hour: 14 });
-  assert.match(header, /^\d{4}-\d{2}-\d{2} 14:__:__$/);
+  assert.match(header, /^\d{4}-\d{2}-\d{2} 14:__:__ UTC$/);
 });
 
 test('buildHeaderText: full — all components', () => {
-  const header = buildHeaderText({ dateOffset: 1, hour: 14, mt: 3, mo: 0, st: 4, so: 5 });
-  assert.match(header, /^\d{4}-\d{2}-\d{2} 14:30:45$/);
+  const header = buildHeaderText({ dateOffset: 1, hour: 14, minute: 30, second: 45 });
+  assert.match(header, /^\d{4}-\d{2}-\d{2} 14:30:45 UTC$/);
 });
 
 test('resolveStateToUnix: incomplete state returns null', () => {
@@ -45,7 +45,7 @@ test('resolveStateToUnix: incomplete state returns null', () => {
 });
 
 test('resolveStateToUnix: defaults seconds to 00', () => {
-  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, mt: 3, mo: 0 });
+  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, minute: 30 });
   const now = new Date();
   const want = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14, 30, 0) / 1000;
   assert.equal(got, want);
@@ -63,7 +63,7 @@ test('buildPickerPage1: includes report ETA when escalation state present', () =
 });
 
 test('resolveStateToUnix: explicit seconds applied correctly', () => {
-  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, mt: 3, mo: 0, st: 1, so: 5 });
+  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, minute: 30, second: 15 });
   const now = new Date();
   const want = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14, 30, 15) / 1000;
   assert.equal(got, want);
@@ -83,7 +83,7 @@ test('handlePickerSelect: date select updates state and re-renders page 1', asyn
   _resetPickerStateForTests();
   _setPickerStateForTests('msg-A', {
     type: 'def_active', x: 0, y: 0, troopsNeeded: 100, notes: null,
-    dateOffset: null, hour: null, mt: null, mo: null, st: null, so: null,
+    dateOffset: null, hour: null, minute: null, second: null,
     createdAt: Date.now(),
   });
   const interaction = fakeSelectInteraction('combat:newpick:date:msg-A', 1);
@@ -101,7 +101,7 @@ test('handlePickerSelect: expired state returns friendly error', async () => {
   assert.match(interaction._updated.content, /expired/i);
 });
 
-import { handlePickerNextButton, handlePickerBackButton, buildPickerPage2 } from '../src/handlers/defCallPicker.js';
+import { handlePickerNextButton, handlePickerBackButton } from '../src/handlers/defCallPicker.js';
 
 function fakeButtonInteraction(customId) {
   return {
@@ -111,71 +111,50 @@ function fakeButtonInteraction(customId) {
   };
 }
 
-test('buildPickerPage2: emits 3 action rows', () => {
-  const payload = buildPickerPage2('msg-1', { st: null, so: null });
-  assert.equal(payload.components.length, 3);
-  assert.equal(payload.ephemeral, true);
-  assert.match(payload.content, /Seconds/);
-});
-
-test('handlePickerNextButton: blocked when page-1 incomplete', async () => {
-  _resetPickerStateForTests();
-  _setPickerStateForTests('msg-N1', { dateOffset: 0, hour: 14, mt: null, mo: null, createdAt: Date.now() });
+test('handlePickerNextButton: returns expired message (legacy button)', async () => {
   const interaction = fakeButtonInteraction('combat:newpick:next:msg-N1');
   await handlePickerNextButton(interaction);
-  assert.ok(interaction._replied);
-  assert.match(interaction._replied.content, /Pick date, hour, and minutes/);
+  assert.equal(interaction._updated.components.length, 0);
+  assert.match(interaction._updated.content, /expired/i);
 });
 
-test('handlePickerNextButton: advances to page 2 when complete', async () => {
-  _resetPickerStateForTests();
-  _setPickerStateForTests('msg-N2', { dateOffset: 0, hour: 14, mt: 3, mo: 0, st: null, so: null, createdAt: Date.now() });
-  const interaction = fakeButtonInteraction('combat:newpick:next:msg-N2');
-  await handlePickerNextButton(interaction);
-  assert.equal(_getPickerStateForTests('msg-N2')._page, 2);
-  assert.equal(interaction._updated.components.length, 3);
-  assert.match(interaction._updated.content, /Seconds/);
-});
-
-test('handlePickerBackButton: returns to page 1', async () => {
-  _resetPickerStateForTests();
-  _setPickerStateForTests('msg-B1', { dateOffset: 0, hour: 14, mt: 3, mo: 0, st: 4, so: 5, _page: 2, createdAt: Date.now() });
+test('handlePickerBackButton: returns expired message (legacy button)', async () => {
   const interaction = fakeButtonInteraction('combat:newpick:back:msg-B1');
   await handlePickerBackButton(interaction);
-  assert.equal(_getPickerStateForTests('msg-B1')._page, 1);
-  assert.equal(interaction._updated.components.length, 5);
+  assert.equal(interaction._updated.components.length, 0);
+  assert.match(interaction._updated.content, /expired/i);
 });
 
-test('handlePickerSelect: st on page 2 updates state and re-renders page 2', async () => {
+test('handlePickerSelect: minute select updates state and re-renders', async () => {
   _resetPickerStateForTests();
   _setPickerStateForTests('msg-S1', {
-    type: 'def_active', dateOffset: 0, hour: 14, mt: 3, mo: 0,
-    st: null, so: null, _page: 2, createdAt: Date.now(),
+    type: 'def_active', dateOffset: 0, hour: 14, minute: null, second: null,
+    createdAt: Date.now(),
   });
   const interaction = {
-    customId: 'combat:newpick:st:msg-S1',
-    values: ['4'],
+    customId: 'combat:newpick:minute:msg-S1',
+    values: ['30'],
     update: async function (payload) { this._updated = payload; },
   };
   await handlePickerSelect(interaction);
-  assert.equal(_getPickerStateForTests('msg-S1').st, 4);
-  assert.equal(interaction._updated.components.length, 3);
-  assert.match(interaction._updated.content, /Seconds/);
+  assert.equal(_getPickerStateForTests('msg-S1').minute, 30);
+  assert.equal(interaction._updated.components.length, 5);
+  assert.match(interaction._updated.content, /Pick impact time/);
 });
 
-test('handlePickerSelect: so on page 2 updates state', async () => {
+test('handlePickerSelect: second select updates state', async () => {
   _resetPickerStateForTests();
   _setPickerStateForTests('msg-S2', {
-    type: 'def_active', dateOffset: 0, hour: 14, mt: 3, mo: 0,
-    st: 4, so: null, _page: 2, createdAt: Date.now(),
+    type: 'def_active', dateOffset: 0, hour: 14, minute: 30, second: null,
+    createdAt: Date.now(),
   });
   const interaction = {
-    customId: 'combat:newpick:so:msg-S2',
-    values: ['5'],
+    customId: 'combat:newpick:second:msg-S2',
+    values: ['15'],
     update: async function (payload) { this._updated = payload; },
   };
   await handlePickerSelect(interaction);
-  assert.equal(_getPickerStateForTests('msg-S2').so, 5);
+  assert.equal(_getPickerStateForTests('msg-S2').second, 15);
 });
 
 import { handlePickerCreateButton } from '../src/handlers/defCallPicker.js';
@@ -185,7 +164,7 @@ import { prepare } from '../src/db/client.js';
 
 test('handlePickerCreateButton: rejects incomplete state', async () => {
   _resetPickerStateForTests();
-  _setPickerStateForTests('msg-C1', { type: 'def_active', dateOffset: null, hour: 14, mt: 3, mo: 0, createdAt: Date.now() });
+  _setPickerStateForTests('msg-C1', { type: 'def_active', dateOffset: null, hour: 14, minute: 30, createdAt: Date.now() });
   const interaction = {
     customId: 'combat:newpick:create:msg-C1',
     reply: async function (p) { this._replied = p; },
@@ -199,7 +178,7 @@ test('handlePickerCreateButton: rejects past deadlines', async () => {
   _resetPickerStateForTests();
   // dateOffset: -1 = yesterday midnight UTC, always in the past.
   _setPickerStateForTests('msg-C2', {
-    type: 'def_active', dateOffset: -1, hour: 0, mt: 0, mo: 0, st: 0, so: 0,
+    type: 'def_active', dateOffset: -1, hour: 0, minute: 0, second: 0,
     createdAt: Date.now(),
   });
   const interaction = {
@@ -218,19 +197,13 @@ test('handlePickerCreateButton: creates call on full state', async () => {
   _resetPickerStateForTests();
   prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
 
-  const futureUnix = Math.floor(Date.now() / 1000) + 3600;
-  const future = new Date(futureUnix * 1000);
-  const todayUtcMs = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
-  const futureUtcMs = Date.UTC(future.getUTCFullYear(), future.getUTCMonth(), future.getUTCDate());
   const state = {
     type: 'def_active',
     x: -12, y: 34, troopsNeeded: 5000, notes: 'pls help', sourceReportId: null,
-    dateOffset: Math.round((futureUtcMs - todayUtcMs) / 86_400_000),
-    hour: future.getUTCHours(),
-    mt: Math.floor(future.getUTCMinutes() / 10),
-    mo: future.getUTCMinutes() % 10,
-    st: Math.floor(future.getUTCSeconds() / 10),
-    so: future.getUTCSeconds() % 10,
+    dateOffset: 1,   // tomorrow — always in the future
+    hour: 12,
+    minute: 0,
+    second: 0,
     createdAt: Date.now(),
   };
   _setPickerStateForTests('msg-C3', state);

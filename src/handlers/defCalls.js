@@ -247,7 +247,7 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
   const state = {
     type, x: coords.x, y: coords.y, troopsNeeded, notes, sourceReportId,
     reportFirstEta,
-    dateOffset: null, hour: null, mt: null, mo: null, st: null, so: null,
+    dateOffset: null, hour: null, minute: null, second: null,
     createdAt: Date.now(),
     _pickerInteraction: interaction,  // used to clear picker controls after "Type instead" submit
   };
