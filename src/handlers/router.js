@@ -117,6 +117,8 @@ import {
   handleIntelWindowSelect,
   handleIntelCommand,
   handleReclassifyCommand,
+  handleIntelCreateDefActiveButton,
+  handleIntelCreateDefPermaButton,
 } from './intel.js';
 
 async function notImplemented(interaction) {
@@ -263,10 +265,12 @@ export async function routeButton(interaction) {
     }
 
     if (ns === 'intel') {
-      if (action === 'refresh')  return await handleIntelRefreshButton(interaction);
-      if (action === 'target')   return await handleIntelTargetButton(interaction);
-      if (action === 'attacker') return await handleIntelAttackerButton(interaction);
-      if (action === 'window')   return await handleIntelWindowButton(interaction);
+      if (action === 'refresh')           return await handleIntelRefreshButton(interaction);
+      if (action === 'target')            return await handleIntelTargetButton(interaction);
+      if (action === 'attacker')          return await handleIntelAttackerButton(interaction);
+      if (action === 'window')            return await handleIntelWindowButton(interaction);
+      if (action === 'create_def_active') return await handleIntelCreateDefActiveButton(interaction);
+      if (action === 'create_def_perma')  return await handleIntelCreateDefPermaButton(interaction);
     }
 
     // Remaining unimplemented

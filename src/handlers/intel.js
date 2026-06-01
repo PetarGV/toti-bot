@@ -15,6 +15,7 @@ import { discordTimestamp } from '../utils/time.js';
 import { chebyshev, defValue } from '../utils/defMath.js';
 import { isLeadershipOrCoord } from '../utils/tier.js';
 import { logger } from '../utils/logger.js';
+import { COMBAT_CONFIG } from './combat.js';
 
 const DASHBOARD_MSG_KEY = 'intel_dashboard_msg_id';
 const DEFAULT_WINDOW_SEC = 24 * 3600;
@@ -199,6 +200,10 @@ export function buildDashboardComponents() {
       new ButtonBuilder().setCustomId('intel:target').setStyle(ButtonStyle.Secondary).setLabel('Target drill-down').setEmoji('🎯'),
       new ButtonBuilder().setCustomId('intel:attacker').setStyle(ButtonStyle.Secondary).setLabel('Attacker drill-down').setEmoji('⚔️'),
       new ButtonBuilder().setCustomId('intel:window').setStyle(ButtonStyle.Secondary).setLabel('Wider window').setEmoji('📅'),
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('intel:create_def_active').setStyle(ButtonStyle.Primary).setLabel('Active Def').setEmoji('🛡️'),
+      new ButtonBuilder().setCustomId('intel:create_def_perma').setStyle(ButtonStyle.Primary).setLabel('Perma Def').setEmoji('🛡️'),
     ),
   ];
 }
@@ -443,4 +448,37 @@ export async function handleIntelWindowSelect(interaction) {
   }
   const days = parseInt(interaction.values[0], 10);
   return interaction.update({ embeds: [buildDashboardEmbed({ windowSec: days * 86400 })], components: [] });
+}
+
+async function _showDefCallModal(interaction, type) {
+  if (!isLeadershipOrCoord(interaction.member)) {
+    return interaction.reply({ content: '❌ Leadership / Def Coord only.', ephemeral: true });
+  }
+  const config = COMBAT_CONFIG[type];
+  if (!config) return interaction.reply({ content: '❌ Unknown call type.', ephemeral: true });
+
+  const modal = new ModalBuilder()
+    .setCustomId(`combat:create_def:${type}`)
+    .setTitle(config.label);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('coords').setLabel('Defender coordinates').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('(-12|34)').setMaxLength(20)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('troops_needed').setLabel('Troops needed (def value)').setStyle(TextInputStyle.Short).setRequired(true).setPlaceholder('e.g. 15000').setMaxLength(10)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder().setCustomId('notes').setLabel('Notes').setStyle(TextInputStyle.Paragraph).setRequired(false).setMaxLength(500)
+    ),
+  );
+  await interaction.showModal(modal);
+}
+
+export async function handleIntelCreateDefActiveButton(interaction) {
+  return _showDefCallModal(interaction, 'def_active');
+}
+
+export async function handleIntelCreateDefPermaButton(interaction) {
+  return _showDefCallModal(interaction, 'def_perma');
 }
