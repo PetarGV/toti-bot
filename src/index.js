@@ -1,6 +1,7 @@
-// Force UTC for all Date operations (deadline parsing, formatting, logs).
-// Must run before any Date is constructed, so it stays at the top of the file.
-process.env.TZ = 'UTC';
+// All deadline parsing/formatting is UTC-correct by construction in src/utils/time.js.
+// For consistent log timestamps, launch the bot with TZ=UTC in the environment
+// (Node samples TZ at process start; runtime mutation of process.env.TZ is a no-op
+// on most platforms).
 
 import 'dotenv/config';
 import { Client, GatewayIntentBits, InteractionType, Events, Partials } from 'discord.js';
