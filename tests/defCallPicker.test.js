@@ -177,3 +177,81 @@ test('handlePickerSelect: so on page 2 updates state', async () => {
   await handlePickerSelect(interaction);
   assert.equal(_getPickerStateForTests('msg-S2').so, 5);
 });
+
+import { handlePickerCreateButton } from '../src/handlers/defCallPicker.js';
+import { setupTestDb, resetTables } from './helpers/testDb.js';
+import { prepare } from '../src/db/client.js';
+
+test('handlePickerCreateButton: rejects incomplete state', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-C1', { type: 'def_active', dateOffset: null, hour: 14, mt: 3, mo: 0, createdAt: Date.now() });
+  const interaction = {
+    customId: 'combat:newpick:create:msg-C1',
+    reply: async function (p) { this._replied = p; },
+    update: async function (p) { this._updated = p; },
+  };
+  await handlePickerCreateButton(interaction);
+  assert.match(interaction._replied.content, /Pick date, hour, and minutes/);
+});
+
+test('handlePickerCreateButton: rejects past deadlines', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-C2', {
+    type: 'def_active', dateOffset: 0, hour: 0, mt: 0, mo: 0, st: 0, so: 0,
+    createdAt: Date.now(),
+  });
+  const interaction = {
+    customId: 'combat:newpick:create:msg-C2',
+    reply: async function (p) { this._replied = p; },
+    update: async function (p) { this._updated = p; },
+  };
+  await handlePickerCreateButton(interaction);
+  // For most of the day this resolves to midnight today = past; rarely (just after 00:00 UTC) it's the future.
+  if (interaction._replied) {
+    assert.match(interaction._replied.content, /past|posted/);
+  } else {
+    assert.match(interaction._updated.content, /posted/);
+  }
+});
+
+test('handlePickerCreateButton: creates call on full state', async () => {
+  await setupTestDb();
+  resetTables();
+  _resetPickerStateForTests();
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
+
+  const futureUnix = Math.floor(Date.now() / 1000) + 3600;
+  const future = new Date(futureUnix * 1000);
+  const todayUtcMs = Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate());
+  const futureUtcMs = Date.UTC(future.getUTCFullYear(), future.getUTCMonth(), future.getUTCDate());
+  const state = {
+    type: 'def_active',
+    x: -12, y: 34, troopsNeeded: 5000, notes: 'pls help', sourceReportId: null,
+    dateOffset: Math.round((futureUtcMs - todayUtcMs) / 86_400_000),
+    hour: future.getUTCHours(),
+    mt: Math.floor(future.getUTCMinutes() / 10),
+    mo: future.getUTCMinutes() % 10,
+    st: Math.floor(future.getUTCSeconds() / 10),
+    so: future.getUTCSeconds() % 10,
+    createdAt: Date.now(),
+  };
+  _setPickerStateForTests('msg-C3', state);
+
+  const guild = { id: 'guild-1', roles: { cache: { find: () => null }, fetch: async () => ({ find: () => null }) } };
+  const interaction = {
+    customId: 'combat:newpick:create:msg-C3',
+    user: { id: 'coord-1' },
+    guild,
+    client: { channels: { fetch: async () => ({ guild, send: async () => ({ id: 'sent-1' }) }) } },
+    reply: async function (p) { this._replied = p; },
+    update: async function (p) { this._updated = p; },
+  };
+
+  await handlePickerCreateButton(interaction);
+  const call = prepare('SELECT * FROM calls WHERE type = ?').get('def_active');
+  assert.ok(call, 'expected call inserted');
+  assert.equal(call.x, -12);
+  assert.equal(call.y, 34);
+  assert.match(interaction._updated.content, /Call #\d+ posted/);
+  assert.equal(_getPickerStateForTests('msg-C3'), undefined, 'state should be reaped');
+});

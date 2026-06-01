@@ -246,7 +246,43 @@ export async function handlePickerBackButton(interaction) {
   await interaction.update({ content: payload.content, components: payload.components });
 }
 export async function handlePickerCreateButton(interaction) {
-  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+  const msgId = _parseMsgId(interaction.customId);
+  const state = pickerState.get(msgId);
+  if (await _expiredOrMissing(interaction, state)) return;
+
+  const deadline = resolveStateToUnix(state);
+  if (deadline == null) {
+    return interaction.reply({
+      content: '❌ Pick date, hour, and minutes first.',
+      ephemeral: true,
+    });
+  }
+  if (deadline < unixNow()) {
+    return interaction.reply({
+      content: '❌ Impact time is in the past.',
+      ephemeral: true,
+    });
+  }
+
+  const { callId, error } = await createDefCall(interaction, {
+    type: state.type,
+    x: state.x,
+    y: state.y,
+    deadline,
+    troopsNeeded: state.troopsNeeded,
+    notes: state.notes,
+    sourceReportId: state.sourceReportId,
+  });
+
+  if (error) {
+    return interaction.reply({ content: error, ephemeral: true });
+  }
+
+  pickerState.delete(msgId);
+  await interaction.update({
+    content: `✅ Call #${callId} posted.`,
+    components: [],
+  });
 }
 export async function handlePickerTypeInsteadSubmit(interaction) {
   return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
