@@ -6,7 +6,7 @@ import {
 import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl, rallyUrl } from '../utils/travianUrl.js';
-import { discordTimestamp, parseDeadline } from '../utils/time.js';
+import { discordTimestamp, parseDeadline, unixNow } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getDefRoleMention } from '../utils/role.js';
@@ -249,6 +249,7 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
     reportFirstEta,
     dateOffset: null, hour: null, mt: null, mo: null, st: null, so: null,
     createdAt: Date.now(),
+    _pickerInteraction: interaction,  // used to clear picker controls after "Type instead" submit
   };
   picker.setPickerState(msgId, state);
   const payload = picker.buildPickerPage1(msgId, state);
@@ -456,6 +457,7 @@ export async function handleActiveDefCommand(interaction) {
   if (!coords) return interaction.reply({ content: '❌ Invalid coords.', ephemeral: true });
   const arrival = parseDeadline(interaction.options.getString('arrival'));
   if (!arrival) return interaction.reply({ content: '❌ Invalid impact time.', ephemeral: true });
+  if (arrival < unixNow()) return interaction.reply({ content: '❌ Impact time is in the past.', ephemeral: true });
   const troopsNeeded = interaction.options.getInteger('troops_needed');
   const notes = interaction.options.getString('notes');
   await createDefCallDirect(interaction, 'def_active', coords, arrival, troopsNeeded, notes, null);

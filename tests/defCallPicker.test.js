@@ -197,8 +197,9 @@ test('handlePickerCreateButton: rejects incomplete state', async () => {
 
 test('handlePickerCreateButton: rejects past deadlines', async () => {
   _resetPickerStateForTests();
+  // dateOffset: -1 = yesterday midnight UTC, always in the past.
   _setPickerStateForTests('msg-C2', {
-    type: 'def_active', dateOffset: 0, hour: 0, mt: 0, mo: 0, st: 0, so: 0,
+    type: 'def_active', dateOffset: -1, hour: 0, mt: 0, mo: 0, st: 0, so: 0,
     createdAt: Date.now(),
   });
   const interaction = {
@@ -207,12 +208,8 @@ test('handlePickerCreateButton: rejects past deadlines', async () => {
     update: async function (p) { this._updated = p; },
   };
   await handlePickerCreateButton(interaction);
-  // For most of the day this resolves to midnight today = past; rarely (just after 00:00 UTC) it's the future.
-  if (interaction._replied) {
-    assert.match(interaction._replied.content, /past|posted/);
-  } else {
-    assert.match(interaction._updated.content, /posted/);
-  }
+  assert.ok(interaction._replied, 'expected a reply for past deadline');
+  assert.match(interaction._replied.content, /past/);
 });
 
 test('handlePickerCreateButton: creates call on full state', async () => {
@@ -293,6 +290,7 @@ test('handlePickerTypeInsteadSubmit: parses + creates call', async () => {
   _setPickerStateForTests('msg-T3', {
     type: 'def_active', x: 10, y: 20, troopsNeeded: 999, notes: null, sourceReportId: null,
     createdAt: Date.now(),
+    _pickerInteraction: { editReply: async () => {} },
   });
   const guild = { id: 'g', roles: { cache: { find: () => null }, fetch: async () => ({ find: () => null }) } };
   const futureIso = new Date(Date.now() + 3600_000).toISOString();

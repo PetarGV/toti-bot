@@ -340,6 +340,8 @@ export async function handlePickerTypeInsteadSubmit(interaction) {
   if (error) return interaction.reply({ content: error, ephemeral: true });
 
   pickerState.delete(msgId);
+  // Clear the original picker controls so the user doesn't see orphaned selects/buttons.
+  state._pickerInteraction?.editReply({ content: `✅ Call #${callId} posted.`, components: [] }).catch(() => {});
   await interaction.reply({
     content: `✅ Call #${callId} posted.`,
     ephemeral: true,
