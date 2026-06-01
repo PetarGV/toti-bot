@@ -145,3 +145,35 @@ test('handlePickerBackButton: returns to page 1', async () => {
   assert.equal(_getPickerStateForTests('msg-B1')._page, 1);
   assert.equal(interaction._updated.components.length, 5);
 });
+
+test('handlePickerSelect: st on page 2 updates state and re-renders page 2', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-S1', {
+    type: 'def_active', dateOffset: 0, hour: 14, mt: 3, mo: 0,
+    st: null, so: null, _page: 2, createdAt: Date.now(),
+  });
+  const interaction = {
+    customId: 'combat:newpick:st:msg-S1',
+    values: ['4'],
+    update: async function (payload) { this._updated = payload; },
+  };
+  await handlePickerSelect(interaction);
+  assert.equal(_getPickerStateForTests('msg-S1').st, 4);
+  assert.equal(interaction._updated.components.length, 3);
+  assert.match(interaction._updated.content, /Seconds/);
+});
+
+test('handlePickerSelect: so on page 2 updates state', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-S2', {
+    type: 'def_active', dateOffset: 0, hour: 14, mt: 3, mo: 0,
+    st: 4, so: null, _page: 2, createdAt: Date.now(),
+  });
+  const interaction = {
+    customId: 'combat:newpick:so:msg-S2',
+    values: ['5'],
+    update: async function (payload) { this._updated = payload; },
+  };
+  await handlePickerSelect(interaction);
+  assert.equal(_getPickerStateForTests('msg-S2').so, 5);
+});
