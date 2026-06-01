@@ -1,6 +1,7 @@
 import { handleSetup, handleAdmin } from '../commands/admin.js';
 import { handleWhoisCommand, handleWhoisButton, handleWhoisModalSubmit } from './whois.js';
 import { handleNearbyCommand, handleNearbyButton, handleNearbyModalSubmit } from './nearby.js';
+import { formatDeadline } from '../utils/time.js';
 import {
   handleOnboardStartButton,
   handleOnboardAdvanceButton,
@@ -322,25 +323,22 @@ export async function routeModal(interaction) {
 }
 
 // ── Autocomplete router ──────────────────────────────────────────────────────
-function _padUtc(n) { return String(n).padStart(2, '0'); }
-function _fmtUtc(d) {
-  return `${d.getUTCFullYear()}-${_padUtc(d.getUTCMonth() + 1)}-${_padUtc(d.getUTCDate())} ${_padUtc(d.getUTCHours())}:${_padUtc(d.getUTCMinutes())}:${_padUtc(d.getUTCSeconds())}`;
-}
-
 async function handleActiveDefArrivalAutocomplete(interaction) {
   const focused = interaction.options.getFocused() ?? '';
   const now = new Date();
+  const MS_PER_HOUR = 60 * 60_000;
   const offsets = [
-    ['in 30m',  30 * 60_000],
-    ['in 1h',   60 * 60_000],
-    ['in 2h',   2 * 60 * 60_000],
-    ['in 3h',   3 * 60 * 60_000],
-    ['in 6h',   6 * 60 * 60_000],
-    ['in 12h',  12 * 60 * 60_000],
-    ['in 24h',  24 * 60 * 60_000],
+    ['in 30m', MS_PER_HOUR / 2],
+    ['in 1h',  MS_PER_HOUR],
+    ['in 2h',  2  * MS_PER_HOUR],
+    ['in 3h',  3  * MS_PER_HOUR],
+    ['in 6h',  6  * MS_PER_HOUR],
+    ['in 12h', 12 * MS_PER_HOUR],
+    ['in 24h', 24 * MS_PER_HOUR],
   ];
   const suggestions = offsets.map(([label, ms]) => {
-    const fullName = `${label}  →  ${_fmtUtc(new Date(now.getTime() + ms))} UTC`;
+    const deadlineUnix = Math.floor((now.getTime() + ms) / 1000);
+    const fullName = `${label}  →  ${formatDeadline(deadlineUnix)} UTC`;
     return { name: fullName.slice(0, 100), value: label };
   });
   const q = focused.toLowerCase();

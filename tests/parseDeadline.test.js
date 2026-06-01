@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDeadline, formatDeadline } from '../src/utils/time.js';
+import { routeAutocomplete } from '../src/handlers/router.js';
 
 test('parseDeadline: YYYY-MM-DD HH:MM:SS is UTC-correct', () => {
   const got = parseDeadline('2030-06-01 10:00:01');
@@ -88,8 +89,6 @@ test('parseDeadline: 10-digit unix seconds boundary', () => {
   assert.equal(parseDeadline('1000000000'), 1_000_000_000);
 });
 
-import { routeAutocomplete } from '../src/handlers/router.js';
-
 test('routeAutocomplete: /active-def arrival returns time-offset suggestions', async () => {
   const responded = [];
   const interaction = {
@@ -122,4 +121,22 @@ test('routeAutocomplete: filters by focused substring', async () => {
   const choices = responded[0];
   assert.ok(choices.length >= 1);
   assert.ok(choices.every(c => c.name.toLowerCase().includes('24')));
+});
+
+test('routeAutocomplete: each suggestion value round-trips through parseDeadline', async () => {
+  const responded = [];
+  const interaction = {
+    isAutocomplete: () => true,
+    commandName: 'active-def',
+    options: { getFocused: () => '' },
+    respond: async (choices) => { responded.push(choices); },
+  };
+  await routeAutocomplete(interaction);
+  const now = Math.floor(Date.now() / 1000);
+  for (const c of responded[0]) {
+    const parsed = parseDeadline(c.value);
+    assert.ok(parsed != null, `parseDeadline failed for ${c.value}`);
+    assert.ok(parsed >= now, `${c.value} should resolve in the future, got ${parsed}`);
+    assert.ok(parsed <= now + 25 * 3600, `${c.value} should be within 25h, got ${parsed - now}s out`);
+  }
 });
