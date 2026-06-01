@@ -68,3 +68,35 @@ test('resolveStateToUnix: explicit seconds applied correctly', () => {
   const want = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14, 30, 15) / 1000;
   assert.equal(got, want);
 });
+
+import { handlePickerSelect } from '../src/handlers/defCallPicker.js';
+
+function fakeSelectInteraction(customId, value) {
+  return {
+    customId,
+    values: [String(value)],
+    update: async function (payload) { this._updated = payload; },
+  };
+}
+
+test('handlePickerSelect: date select updates state and re-renders page 1', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-A', {
+    type: 'def_active', x: 0, y: 0, troopsNeeded: 100, notes: null,
+    dateOffset: null, hour: null, mt: null, mo: null, st: null, so: null,
+    createdAt: Date.now(),
+  });
+  const interaction = fakeSelectInteraction('combat:newpick:date:msg-A', 1);
+  await handlePickerSelect(interaction);
+  assert.equal(_getPickerStateForTests('msg-A').dateOffset, 1);
+  assert.equal(interaction._updated.components.length, 5);
+  assert.match(interaction._updated.content, /Pick impact time/);
+});
+
+test('handlePickerSelect: expired state returns friendly error', async () => {
+  _resetPickerStateForTests();
+  const interaction = fakeSelectInteraction('combat:newpick:hour:msg-MISSING', 14);
+  await handlePickerSelect(interaction);
+  assert.equal(interaction._updated.components.length, 0);
+  assert.match(interaction._updated.content, /expired/i);
+});

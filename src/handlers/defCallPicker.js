@@ -137,3 +137,66 @@ export function buildPickerPage1(msgId, state) {
     ],
   };
 }
+
+function _parseMsgId(customId) {
+  // Format: combat:newpick:<part>:<msgId>
+  return customId.split(':').slice(3).join(':');
+}
+
+function _expiredOrMissing(interaction, state) {
+  if (!state) {
+    return interaction.update({
+      content: '⏱️ Picker session expired — please re-open the call.',
+      components: [],
+    }).then(() => true).catch(() => true);
+  }
+  return false;
+}
+
+export async function handlePickerSelect(interaction) {
+  const id = interaction.customId;
+  const part = id.split(':')[2];           // 'date' | 'hour' | 'mt' | 'mo' | 'st' | 'so'
+  const msgId = _parseMsgId(id);
+  const state = pickerState.get(msgId);
+  if (await _expiredOrMissing(interaction, state)) return;
+
+  const value = parseInt(interaction.values[0], 10);
+  switch (part) {
+    case 'date': state.dateOffset = value; break;
+    case 'hour': state.hour = value; break;
+    case 'mt':   state.mt = value; break;
+    case 'mo':   state.mo = value; break;
+    case 'st':   state.st = value; break;
+    case 'so':   state.so = value; break;
+    default:
+      return interaction.update({ content: '❌ Unknown picker control.', components: [] });
+  }
+
+  // Re-render current page.
+  const onPage2 = state._page === 2;
+  const payload = onPage2
+    ? buildPickerPage2(msgId, state)
+    : buildPickerPage1(msgId, state);
+  await interaction.update({ content: payload.content, components: payload.components });
+}
+
+export function buildPickerPage2(msgId, state) {
+  // Implemented in Task 11 — temporarily mirrors page 1.
+  return buildPickerPage1(msgId, state);
+}
+
+export async function handlePickerTypeInsteadButton(interaction) {
+  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+}
+export async function handlePickerNextButton(interaction) {
+  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+}
+export async function handlePickerBackButton(interaction) {
+  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+}
+export async function handlePickerCreateButton(interaction) {
+  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+}
+export async function handlePickerTypeInsteadSubmit(interaction) {
+  return interaction.reply({ content: 'Not implemented yet.', ephemeral: true });
+}

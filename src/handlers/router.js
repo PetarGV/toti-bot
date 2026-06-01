@@ -100,6 +100,14 @@ import {
   handleSendingDefCommand,
 } from './defCalls.js';
 import {
+  handlePickerSelect,
+  handlePickerTypeInsteadButton,
+  handlePickerNextButton,
+  handlePickerBackButton,
+  handlePickerCreateButton,
+  handlePickerTypeInsteadSubmit,
+} from './defCallPicker.js';
+import {
   handleIntelRefreshButton,
   handleIntelTargetButton,
   handleIntelAttackerButton,
@@ -272,6 +280,7 @@ export async function routeSelect(interaction) {
     if (id === 'profile:tribe-select')   return await handleTribeSelect(interaction);
     if (id === 'help:category')          return await handleHelpSelect(interaction);
     if (id === ROLE_SELECT_CUSTOM_ID)    return await handleRoleSelect(interaction);
+    if (id.startsWith('combat:newpick:')) return await handlePickerSelect(interaction);
     if (id.startsWith('combat:pick:'))   return await handleCombatPickSelect(interaction);
     if (id.startsWith('sync:pick-conflict:'))     return await handleConflictPickSelect(interaction);
     if (id.startsWith('sync:pick-ambig:'))        return await handleAmbigPickSelect(interaction);
