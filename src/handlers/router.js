@@ -1,6 +1,7 @@
 import { handleSetup, handleAdmin } from '../commands/admin.js';
 import { handleWhoisCommand, handleWhoisButton, handleWhoisModalSubmit } from './whois.js';
 import { handleNearbyCommand, handleNearbyButton, handleNearbyModalSubmit } from './nearby.js';
+import { formatDeadline } from '../utils/time.js';
 import {
   handleOnboardStartButton,
   handleOnboardAdvanceButton,
@@ -98,6 +99,14 @@ import {
   handlePermaDefCommand,
   handleSendingDefCommand,
 } from './defCalls.js';
+import {
+  handlePickerSelect,
+  handlePickerTypeInsteadButton,
+  handlePickerNextButton,
+  handlePickerBackButton,
+  handlePickerCreateButton,
+  handlePickerTypeInsteadSubmit,
+} from './defCallPicker.js';
 import {
   handleIntelRefreshButton,
   handleIntelTargetButton,
@@ -230,6 +239,13 @@ export async function routeButton(interaction) {
         if (id.split(':')[3] === 'next') return await handleCombatPickContinueButton(interaction);
         return await handleCombatPickButton(interaction);
       }
+      if (action === 'newpick') {
+        const sub = id.split(':')[2];
+        if (sub === 'type_instead')   return await handlePickerTypeInsteadButton(interaction);
+        if (sub === 'next')           return await handlePickerNextButton(interaction);
+        if (sub === 'back')           return await handlePickerBackButton(interaction);
+        if (sub === 'create')         return await handlePickerCreateButton(interaction);
+      }
     }
 
     if (ns === 'scout') {
@@ -271,6 +287,7 @@ export async function routeSelect(interaction) {
     if (id === 'profile:tribe-select')   return await handleTribeSelect(interaction);
     if (id === 'help:category')          return await handleHelpSelect(interaction);
     if (id === ROLE_SELECT_CUSTOM_ID)    return await handleRoleSelect(interaction);
+    if (id.startsWith('combat:newpick:')) return await handlePickerSelect(interaction);
     if (id.startsWith('combat:pick:'))   return await handleCombatPickSelect(interaction);
     if (id.startsWith('sync:pick-conflict:'))     return await handleConflictPickSelect(interaction);
     if (id.startsWith('sync:pick-ambig:'))        return await handleAmbigPickSelect(interaction);
@@ -291,6 +308,7 @@ export async function routeModal(interaction) {
     if (id === 'nearby:lookup')                 return await handleNearbyModalSubmit(interaction);
     if (id.startsWith('push:create:'))          return await handlePushCreateModal(interaction);
     if (id.startsWith('pledge:submit:'))        return await handlePledgeSubmitModal(interaction);
+    if (id.startsWith('combat:newpick:type_instead_submit:')) return await handlePickerTypeInsteadSubmit(interaction);
     if (id.startsWith('combat:create_def_from_report:')) return await handleDefCallFromReportModal(interaction);
     if (id.startsWith('combat:create_def:'))        return await handleDefCallCreateModal(interaction);
     if (id.startsWith('combat:send_def_submit:'))   return await handleSendDefSubmitModal(interaction);
@@ -318,5 +336,43 @@ export async function routeModal(interaction) {
     logger.error('Modal error [%s]:', id, err);
     const reply = { content: '❌ Something went wrong.', ephemeral: true };
     await safeReply(interaction, reply);
+  }
+}
+
+// ── Autocomplete router ──────────────────────────────────────────────────────
+async function handleActiveDefArrivalAutocomplete(interaction) {
+  const focused = interaction.options.getFocused() ?? '';
+  const now = new Date();
+  const MS_PER_HOUR = 60 * 60_000;
+  const offsets = [
+    ['in 30m', MS_PER_HOUR / 2],
+    ['in 1h',  MS_PER_HOUR],
+    ['in 2h',  2  * MS_PER_HOUR],
+    ['in 3h',  3  * MS_PER_HOUR],
+    ['in 6h',  6  * MS_PER_HOUR],
+    ['in 12h', 12 * MS_PER_HOUR],
+    ['in 24h', 24 * MS_PER_HOUR],
+  ];
+  const suggestions = offsets.map(([label, ms]) => {
+    const deadlineUnix = Math.floor((now.getTime() + ms) / 1000);
+    const fullName = `${label}  →  ${formatDeadline(deadlineUnix)} UTC`;
+    return { name: fullName.slice(0, 100), value: label };
+  });
+  const q = focused.toLowerCase();
+  const filtered = q
+    ? suggestions.filter(s => s.name.toLowerCase().includes(q))
+    : suggestions;
+  await interaction.respond(filtered.slice(0, 25));
+}
+
+export async function routeAutocomplete(interaction) {
+  try {
+    if (interaction.commandName === 'active-def') {
+      return await handleActiveDefArrivalAutocomplete(interaction);
+    }
+    return await interaction.respond([]);
+  } catch (err) {
+    logger.warn('Autocomplete error:', err.message);
+    try { await interaction.respond([]); } catch {}
   }
 }

@@ -1,6 +1,7 @@
-// Force UTC for all Date operations (deadline parsing, formatting, logs).
-// Must run before any Date is constructed, so it stays at the top of the file.
-process.env.TZ = 'UTC';
+// All deadline parsing/formatting is UTC-correct by construction in src/utils/time.js.
+// For consistent log timestamps, launch the bot with TZ=UTC in the environment
+// (Node samples TZ at process start; runtime mutation of process.env.TZ is a no-op
+// on most platforms).
 
 import 'dotenv/config';
 import { Client, GatewayIntentBits, InteractionType, Events, Partials } from 'discord.js';
@@ -15,7 +16,7 @@ import { startMemberSyncJob, runMemberSync } from './jobs/memberSync.js';
 import { startIntelDashboardJob } from './jobs/intelDashboard.js';
 import { unixNow } from './utils/time.js';
 import { startHealthServer, stopHealthServer } from './server/health.js';
-import { routeCommand, routeButton, routeModal, routeSelect } from './handlers/router.js';
+import { routeCommand, routeButton, routeModal, routeSelect, routeAutocomplete } from './handlers/router.js';
 import { handleGuildMemberAdd, handleGuildMemberRemove } from './handlers/onboarding.js';
 import { handleTranslateReaction } from './handlers/translateReaction.js';
 import { handleScoutReportMessage } from './handlers/scoutReportUpload.js';
@@ -103,6 +104,7 @@ client.on(Events.Error, (err) => {
 });
 
 client.on('interactionCreate', async (interaction) => {
+  if (interaction.isAutocomplete())         return routeAutocomplete(interaction);
   if (interaction.isChatInputCommand())     return routeCommand(interaction);
   if (interaction.isButton())               return routeButton(interaction);
   if (interaction.isStringSelectMenu?.())   return routeSelect(interaction);

@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupTestDb, resetTables } from './helpers/testDb.js';
 import { prepare } from '../src/db/client.js';
-import { parseDeadline } from '../src/utils/time.js';
 import { routeButton, routeModal } from '../src/handlers/router.js';
 
 function fakeMember(roleNames) {
@@ -69,12 +68,12 @@ test('report escalate active button opens a pre-filled def call modal', async ()
   const json = interaction.modal.toJSON();
   assert.equal(json.custom_id, `combat:create_def_from_report:def_active:${reportId}`);
   assert.equal(componentById(json, 'coords').value, '(-12|34)');
-  assert.equal(parseDeadline(componentById(json, 'arrival').value), 1_900_000_000);
   assert.match(componentById(json, 'notes').value, /Wave spread 6s/);
   assert.match(componentById(json, 'notes').value, /in-between def possible/);
+  assert.equal(componentById(json, 'arrival'), undefined, 'arrival field must be absent from modal');
 });
 
-test('from-report def call modal creates call and links the report', async () => {
+test('from-report def call modal replies with picker page 1 instead of creating call', async () => {
   await setupTestDb();
   resetTables();
   process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
@@ -85,60 +84,37 @@ test('from-report def call modal creates call and links the report', async () =>
   prepare('INSERT INTO panels (type, channel_id, message_id) VALUES (?, ?, ?)').run('def-calls', 'def-channel', 'panel-msg');
   prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
 
-  const sent = [];
-  const guild = {
-    id: 'guild-1',
-    name: 'Test Guild',
-    roles: {
-      cache: { find: () => null },
-      fetch: async () => ({ find: () => null }),
-    },
-  };
   const interaction = {
     customId: `combat:create_def_from_report:def_active:${reportId}`,
     member: fakeMember(['Defense Coordinator']),
     user: { id: 'coord-1' },
-    guild,
     fields: {
       getTextInputValue(name) {
         return {
           coords: '(-12|34)',
-          arrival: '2030-03-17 17:46:40',
           troops_needed: '5,000',
           notes: 'Wave gap ~2.0s - in-between def possible',
         }[name] ?? '';
       },
     },
-    client: {
-      channels: {
-        fetch: async id => ({
-          id,
-          guild,
-          send: async payload => {
-            sent.push(payload);
-            return { id: `msg-${sent.length}` };
-          },
-        }),
-      },
+    client: { channels: { fetch: async () => ({}) } },
+    _editedTo: null,
+    reply: async (payload) => {
+      interaction._sentMessageId = 'eph-1';
+      return { id: 'eph-1' };
     },
-    reply: async payload => { interaction.replyPayload = payload; },
+    editReply: async (payload) => { interaction._editedTo = payload; },
   };
 
   await routeModal(interaction);
 
+  // No call inserted yet — the picker is still being filled out.
   const call = prepare('SELECT * FROM calls WHERE type = ?').get('def_active');
-  assert.ok(call, 'expected a def_active call to be inserted');
-  assert.equal(call.x, -12);
-  assert.equal(call.y, 34);
-  assert.equal(call.message_id, 'msg-1');
-  assert.deepEqual(JSON.parse(call.payload), {
-    troops_needed: 5000,
-    notes: 'Wave gap ~2.0s - in-between def possible',
-    source_report_id: reportId,
-  });
+  assert.equal(call, undefined, 'no call should be created until picker Create is clicked');
 
-  const report = prepare('SELECT escalated_call_id FROM incoming_reports WHERE id = ?').get(reportId);
-  assert.equal(report.escalated_call_id, call.id);
-  assert.equal(sent.length, 1);
-  assert.match(interaction.replyPayload.content, new RegExp(`Call #${call.id} posted`));
+  // editReply should have the picker page-1 components.
+  assert.ok(interaction._editedTo, 'expected editReply to be invoked');
+  assert.equal(interaction._editedTo.components.length, 5);
+  assert.match(interaction._editedTo.content, /Report ETA: 2030-03-17 17:46:40 UTC/);
+  assert.match(interaction._editedTo.content, /Pick impact time/);
 });
