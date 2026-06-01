@@ -64,6 +64,11 @@ export const commandDefinitions = [
         .addStringOption(o => o.setName('ign').setDescription('IGN to mark as primary').setRequired(true))
     )
     .addSubcommand(s =>
+      s.setName('set-def-calls-channel')
+        .setDescription('Set the channel where Active Def and Perma Def call embeds are posted')
+        .addChannelOption(o => o.setName('channel').setDescription('Def calls channel').setRequired(true))
+    )
+    .addSubcommand(s =>
       s.setName('set-welcome-channel')
         .setDescription('Set the channel where new members get the onboarding greeting')
         .addChannelOption(o => o.setName('channel').setDescription('Welcome channel').setRequired(true))

@@ -403,6 +403,15 @@ export async function handleAdmin(interaction) {
     });
   }
 
+  if (sub === 'set-def-calls-channel') {
+    const channel = interaction.options.getChannel('channel');
+    setConfig('def_calls_channel_id', channel.id);
+    return interaction.reply({
+      content: `✅ Def calls channel set to <#${channel.id}>. Active Def and Perma Def embeds will be posted there.`,
+      ephemeral: true,
+    });
+  }
+
   if (sub === 'set-welcome-channel') {
     const channel = interaction.options.getChannel('channel');
     setConfig('welcome_channel_id', channel.id);
