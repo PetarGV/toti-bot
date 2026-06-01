@@ -320,3 +320,20 @@ export async function routeModal(interaction) {
     await safeReply(interaction, reply);
   }
 }
+
+// ── Autocomplete router ──────────────────────────────────────────────────────
+async function handleActiveDefArrivalAutocomplete(interaction) {
+  await interaction.respond([]);
+}
+
+export async function routeAutocomplete(interaction) {
+  try {
+    if (interaction.commandName === 'active-def') {
+      return await handleActiveDefArrivalAutocomplete(interaction);
+    }
+    return await interaction.respond([]);
+  } catch (err) {
+    logger.warn('Autocomplete error:', err.message);
+    try { await interaction.respond([]); } catch {}
+  }
+}
