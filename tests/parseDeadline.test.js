@@ -76,3 +76,14 @@ test('formatDeadline(0/null) returns empty string', () => {
   assert.equal(formatDeadline(0), '');
   assert.equal(formatDeadline(null), '');
 });
+
+test('parseDeadline: 9-digit (pre-2001) number is NOT treated as unix seconds', () => {
+  // 9 digits would be pre-Sept 2001. parseDeadline routes these to chrono,
+  // which returns null for a bare integer with no date-ish context.
+  assert.equal(parseDeadline('123456789'), null);
+});
+
+test('parseDeadline: 10-digit unix seconds boundary', () => {
+  // 1000000000 → 2001-09-09T01:46:40Z — the first 10-digit unix.
+  assert.equal(parseDeadline('1000000000'), 1_000_000_000);
+});

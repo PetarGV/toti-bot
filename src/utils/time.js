@@ -20,7 +20,7 @@ export function parseDeadline(input) {
   if (tag) return parseInt(tag[1], 10);
 
   // 2. Bare unix seconds (post-2001)
-  if (/^\d{9,11}$/.test(raw)) return parseInt(raw, 10);
+  if (/^\d{10,11}$/.test(raw)) return parseInt(raw, 10);
 
   // 3. '+2h30m' shorthand for 'in 2h30m'
   const normalized = raw.replace(/^\+/, 'in ');
