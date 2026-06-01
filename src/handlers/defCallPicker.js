@@ -38,16 +38,18 @@ export function _setPickerStateForTests(msgId, value) {
   pickerState.set(msgId, value);
 }
 
+function utcDateString(offset) {
+  const now = new Date();
+  const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offset));
+  const pad = n => String(n).padStart(2, '0');
+  return `${target.getUTCFullYear()}-${pad(target.getUTCMonth() + 1)}-${pad(target.getUTCDate())}`;
+}
+
 // Format the partial-state header text. Unpicked slots render as underscores.
 export function buildHeaderText(state) {
   const datePart = (state.dateOffset == null)
     ? '____-__-__'
-    : (() => {
-        const now = new Date();
-        const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + state.dateOffset));
-        const pad = n => String(n).padStart(2, '0');
-        return `${target.getUTCFullYear()}-${pad(target.getUTCMonth() + 1)}-${pad(target.getUTCDate())}`;
-      })();
+    : utcDateString(state.dateOffset);
   const hourPart = state.hour == null ? '__' : String(state.hour).padStart(2, '0');
   const minPart = (state.mt == null || state.mo == null) ? '__' : `${state.mt}${state.mo}`;
   const secPart = (state.st == null || state.so == null) ? '__' : `${state.st}${state.so}`;
@@ -67,14 +69,12 @@ export function resolveStateToUnix(state) {
     state.mt * 10 + state.mo,
     (state.st ?? 0) * 10 + (state.so ?? 0),
   );
+  // Callers must validate that the result is in the future (not done here).
   return Math.floor(utcMs / 1000);
 }
 
 function dateLabel(offset) {
-  const now = new Date();
-  const target = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offset));
-  const pad = n => String(n).padStart(2, '0');
-  const datePart = `${target.getUTCFullYear()}-${pad(target.getUTCMonth() + 1)}-${pad(target.getUTCDate())}`;
+  const datePart = utcDateString(offset);
   if (offset === 0) return `Today (${datePart} UTC)`;
   if (offset === 1) return `Tomorrow (${datePart} UTC)`;
   return `Day after (${datePart} UTC)`;

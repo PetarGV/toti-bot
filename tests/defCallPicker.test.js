@@ -61,3 +61,10 @@ test('buildPickerPage1: includes report ETA when escalation state present', () =
   const payload = buildPickerPage1('msg-1', { reportFirstEta: 1_900_000_000 });
   assert.match(payload.content, /Report ETA: 2030-03-17 17:46:40 UTC/);
 });
+
+test('resolveStateToUnix: explicit seconds applied correctly', () => {
+  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, mt: 3, mo: 0, st: 1, so: 5 });
+  const now = new Date();
+  const want = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14, 30, 15) / 1000;
+  assert.equal(got, want);
+});
