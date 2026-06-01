@@ -25,6 +25,10 @@ const _janitor = setInterval(() => {
 }, 60_000);
 if (typeof _janitor.unref === 'function') _janitor.unref();
 
+export function setPickerState(msgId, state) {
+  pickerState.set(msgId, state);
+}
+
 // Exposed for tests; do not call from production code.
 export function _resetPickerStateForTests() {
   pickerState.clear();

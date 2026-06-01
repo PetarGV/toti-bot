@@ -236,8 +236,13 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
     ? prepare('SELECT first_eta FROM incoming_reports WHERE id = ?').get(sourceReportId)?.first_eta ?? null
     : null;
 
+  // Dynamic import: defCallPicker.js imports createDefCall from this file, so a
+  // top-level import would create a circular dependency.
   const picker = await import('./defCallPicker.js');
   const sent = await interaction.reply({ content: 'Building picker…', ephemeral: true, fetchReply: true });
+  if (!sent?.id) {
+    return interaction.editReply({ content: '❌ Could not initialize picker. Please try again.', components: [] });
+  }
   const msgId = sent.id;
   const state = {
     type, x: coords.x, y: coords.y, troopsNeeded, notes, sourceReportId,
@@ -245,7 +250,7 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
     dateOffset: null, hour: null, mt: null, mo: null, st: null, so: null,
     createdAt: Date.now(),
   };
-  picker._setPickerStateForTests(msgId, state);
+  picker.setPickerState(msgId, state);
   const payload = picker.buildPickerPage1(msgId, state);
   await interaction.editReply({ content: payload.content, components: payload.components });
   return sent.id;
