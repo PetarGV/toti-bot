@@ -23,6 +23,7 @@ import {
   buildHeaderText,
   resolveStateToUnix,
   buildPickerPage1,
+  buildPickerPage2,
 } from '../src/handlers/defCallPicker.js';
 
 test('buildHeaderText: all unpicked', () => {
@@ -91,6 +92,36 @@ test('buildPickerPage1: mt select has 6 options (0-5), mo select has 10 options 
 test('buildPickerPage1: includes report ETA when escalation state present', () => {
   const payload = buildPickerPage1('msg-1', { reportFirstEta: 1_900_000_000 });
   assert.match(payload.content, /Report ETA: 2030-03-17 17:46:40 UTC/);
+});
+
+test('buildPickerPage2: emits 3 action rows', () => {
+  const payload = buildPickerPage2('msg-1', { dateOffset: 0, hour: 14, mt: 3, mo: 0 });
+  assert.equal(payload.components.length, 3);
+  assert.equal(payload.ephemeral, true);
+});
+
+test('buildPickerPage2: components are st/so selects + back/create buttons', () => {
+  const payload = buildPickerPage2('msg-1', { dateOffset: 0, hour: 14, mt: 3, mo: 0 });
+  const customIds = payload.components.flatMap(r => r.components).map(c => c.data?.custom_id);
+  assert.ok(customIds.includes('combat:newpick:st:msg-1'),     'st select missing');
+  assert.ok(customIds.includes('combat:newpick:so:msg-1'),     'so select missing');
+  assert.ok(customIds.includes('combat:newpick:back:msg-1'),   'back button missing');
+  assert.ok(customIds.includes('combat:newpick:create:msg-1'), 'create button missing');
+});
+
+test('buildPickerPage2: st has 6 options (0-5), so has 10 options (0-9)', () => {
+  const payload = buildPickerPage2('msg-1', { dateOffset: 0, hour: 14, mt: 3, mo: 0 });
+  const all = payload.components.flatMap(r => r.components);
+  const st = all.find(c => c.data?.custom_id === 'combat:newpick:st:msg-1');
+  const so = all.find(c => c.data?.custom_id === 'combat:newpick:so:msg-1');
+  assert.equal(st.options.length, 6);
+  assert.equal(so.options.length, 10);
+});
+
+test('buildPickerPage2: content shows seconds header with current partial time', () => {
+  const payload = buildPickerPage2('msg-1', { dateOffset: 0, hour: 14, mt: 3, mo: 0 });
+  assert.match(payload.content, /Seconds/);
+  assert.match(payload.content, /14:30:__/);
 });
 
 test('resolveStateToUnix: explicit seconds applied correctly', () => {

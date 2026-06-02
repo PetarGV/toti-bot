@@ -152,6 +152,51 @@ export function buildPickerPage1(msgId, state) {
   };
 }
 
+// Page 2: seconds (tens + ones) + Back / Create buttons.
+export function buildPickerPage2(msgId, state) {
+  const content = `Seconds (UTC) — currently: \`${buildHeaderText(state)}\``;
+
+  const stSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:newpick:st:${msgId}`)
+    .setPlaceholder(state.st == null ? 'Second (tens)' : `Sec tens: ${state.st}`)
+    .addOptions([0, 1, 2, 3, 4, 5].map(d => ({
+      label: String(d),
+      value: String(d),
+      default: state.st === d,
+    })));
+
+  const soSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:newpick:so:${msgId}`)
+    .setPlaceholder(state.so == null ? 'Second (ones, or skip for :00)' : `Sec ones: ${state.so}`)
+    .addOptions(Array.from({ length: 10 }, (_, d) => ({
+      label: String(d),
+      value: String(d),
+      default: state.so === d,
+    })));
+
+  const backBtn = new ButtonBuilder()
+    .setCustomId(`combat:newpick:back:${msgId}`)
+    .setStyle(ButtonStyle.Secondary)
+    .setLabel('Back')
+    .setEmoji('⬅️');
+
+  const createBtn = new ButtonBuilder()
+    .setCustomId(`combat:newpick:create:${msgId}`)
+    .setStyle(ButtonStyle.Success)
+    .setLabel('Create call')
+    .setEmoji('✅');
+
+  return {
+    content,
+    ephemeral: true,
+    components: [
+      new ActionRowBuilder().addComponents(stSelect),
+      new ActionRowBuilder().addComponents(soSelect),
+      new ActionRowBuilder().addComponents(backBtn, createBtn),
+    ],
+  };
+}
+
 function _parseMsgId(customId) {
   // Format: combat:newpick:<part>:<msgId>
   return customId.split(':').slice(3).join(':');
