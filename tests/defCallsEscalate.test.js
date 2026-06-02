@@ -118,3 +118,44 @@ test('from-report def call modal replies with picker page 1 instead of creating 
   assert.match(interaction._editedTo.content, /Report ETA: 2030-03-17 17:46:40 UTC/);
   assert.match(interaction._editedTo.content, /Pick impact time/);
 });
+
+test('def_active panel button opens modal with optional arrival field', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+
+  const interaction = {
+    customId: 'call:def_active',
+    member: fakeMember(['Leadership']),
+    user: { id: 'leader-1' },
+    showModal: async modal => { interaction.modal = modal; },
+  };
+  await routeButton(interaction);
+
+  assert.ok(interaction.modal, 'expected a modal');
+  const json = interaction.modal.toJSON();
+  const arrival = componentById(json, 'arrival');
+  assert.ok(arrival, 'arrival field should be present for def_active');
+  assert.equal(arrival.required, false);
+  assert.match(arrival.placeholder, /or just type it here/);
+});
+
+test('def_perma panel button modal has no arrival field', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+
+  const interaction = {
+    customId: 'call:def_perma',
+    member: fakeMember(['Leadership']),
+    user: { id: 'leader-1' },
+    showModal: async modal => { interaction.modal = modal; },
+  };
+  await routeButton(interaction);
+
+  assert.ok(interaction.modal, 'expected a modal');
+  const json = interaction.modal.toJSON();
+  assert.equal(componentById(json, 'arrival'), undefined, 'def_perma has no deadline, no arrival field');
+});

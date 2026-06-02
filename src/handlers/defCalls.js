@@ -150,6 +150,19 @@ export async function handleDefCallButton(interaction) {
     new ActionRowBuilder().addComponents(troops),
     new ActionRowBuilder().addComponents(notes),
   );
+
+  // def_active gets an optional Impact-time text box; def_perma has no deadline.
+  if (!config.noDeadline) {
+    const arrival = new TextInputBuilder()
+      .setCustomId('arrival')
+      .setLabel('Impact time (UTC) — optional')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setPlaceholder('or just type it here · 14:30:45 · in 2h30m')
+      .setMaxLength(60);
+    modal.addComponents(new ActionRowBuilder().addComponents(arrival));
+  }
+
   await interaction.showModal(modal);
 }
 
