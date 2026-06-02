@@ -6,7 +6,7 @@ import {
 import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl, rallyUrl } from '../utils/travianUrl.js';
-import { discordTimestamp, parseDeadline, unixNow } from '../utils/time.js';
+import { discordTimestamp, formatDeadline, parseDeadline, unixNow } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getDefRoleMention } from '../utils/role.js';
@@ -63,7 +63,7 @@ export function buildDefCallEmbed(call, pledges) {
     );
 
   if (!config.noDeadline) {
-    embed.addFields({ name: 'Impact', value: call.deadline ? `${discordTimestamp(call.deadline, 'D')} ${discordTimestamp(call.deadline, 'T')} (${discordTimestamp(call.deadline, 'R')})` : '*Unknown*', inline: true });
+    embed.addFields({ name: 'Impact', value: call.deadline ? `${formatDeadline(call.deadline)} UTC (${discordTimestamp(call.deadline, 'R')})` : '*Unknown*', inline: true });
   }
 
   embed.addFields({ name: 'Needed', value: `${needed} def`, inline: true });
