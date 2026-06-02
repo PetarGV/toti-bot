@@ -6,7 +6,7 @@ import {
 import { prepare } from '../db/client.js';
 import { parseCoords, formatCoords } from '../utils/coords.js';
 import { mapUrl, rallyUrl } from '../utils/travianUrl.js';
-import { discordTimestamp, parseDeadline, unixNow } from '../utils/time.js';
+import { discordTimestamp, formatDeadline, parseDeadline, unixNow } from '../utils/time.js';
 import { logger } from '../utils/logger.js';
 import { inc } from '../utils/metrics.js';
 import { getDefRoleMention } from '../utils/role.js';
@@ -17,7 +17,10 @@ import { COMBAT_CONFIG } from './combat.js';
 import { rebuildDashboard } from './intel.js';
 
 function getDefCallsChannelId() {
+  // Prefer the explicit def-calls channel; fall back through the leadership-intel and legacy
+  // leadership keys so pre-split installs keep working until an admin configures def-calls.
   return prepare('SELECT value FROM config WHERE key=?').get('def_calls_channel_id')?.value
+    ?? prepare('SELECT value FROM config WHERE key=?').get('leadership_intel_channel_id')?.value
     ?? prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value
     ?? null;
 }
@@ -63,7 +66,7 @@ export function buildDefCallEmbed(call, pledges) {
     );
 
   if (!config.noDeadline) {
-    embed.addFields({ name: 'Impact', value: call.deadline ? `${discordTimestamp(call.deadline, 'D')} ${discordTimestamp(call.deadline, 'T')} (${discordTimestamp(call.deadline, 'R')})` : '*Unknown*', inline: true });
+    embed.addFields({ name: 'Impact', value: call.deadline ? `${formatDeadline(call.deadline)} UTC (${discordTimestamp(call.deadline, 'R')})` : '*Unknown*', inline: true });
   }
 
   embed.addFields({ name: 'Needed', value: `${needed} def`, inline: true });
@@ -147,6 +150,19 @@ export async function handleDefCallButton(interaction) {
     new ActionRowBuilder().addComponents(troops),
     new ActionRowBuilder().addComponents(notes),
   );
+
+  // def_active gets an optional Impact-time text box; def_perma has no deadline.
+  if (!config.noDeadline) {
+    const arrival = new TextInputBuilder()
+      .setCustomId('arrival')
+      .setLabel('Impact time (UTC) — optional')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setPlaceholder('or just type it here · 14:30:45 · in 2h30m')
+      .setMaxLength(60);
+    modal.addComponents(new ActionRowBuilder().addComponents(arrival));
+  }
+
   await interaction.showModal(modal);
 }
 
@@ -233,6 +249,23 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
     return interaction.reply({ content: `✅ Call #${callId} posted.`, ephemeral: true });
   }
 
+  // Fast path: optional `arrival` field on the modal. If it parses to a future
+  // timestamp, skip the picker entirely. Unparseable/past values silently fall
+  // through to the picker (per design — the user can correct via clicks).
+  let arrivalRaw = '';
+  try { arrivalRaw = interaction.fields.getTextInputValue('arrival') ?? ''; } catch { /* field absent — older modal */ }
+  if (arrivalRaw.trim()) {
+    const deadline = parseDeadline(arrivalRaw);
+    if (deadline != null && deadline >= unixNow()) {
+      const { callId, error } = await createDefCall(interaction, {
+        type, x: coords.x, y: coords.y, deadline, troopsNeeded, notes, sourceReportId,
+      });
+      if (error) return interaction.reply({ content: error, ephemeral: true });
+      return interaction.reply({ content: `✅ Call #${callId} posted.`, ephemeral: true });
+    }
+    // else: silent fall-through to picker
+  }
+
   // def_active: stash state, reply with picker page 1.
   const reportFirstEta = sourceReportId
     ? prepare('SELECT first_eta FROM incoming_reports WHERE id = ?').get(sourceReportId)?.first_eta ?? null
@@ -249,7 +282,7 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
   const state = {
     type, x: coords.x, y: coords.y, troopsNeeded, notes, sourceReportId,
     reportFirstEta,
-    dateOffset: null, hour: null, minute: null, second: null,
+    dateOffset: null, hour: null, mt: null, mo: null, st: null, so: null,
     createdAt: Date.now(),
     _pickerInteraction: interaction,  // used to clear picker controls after "Type instead" submit
   };
@@ -448,6 +481,19 @@ async function showEscalateModal(interaction, type, reportId) {
     .setMaxLength(500);
   if (notesPrefill) notes.setValue(notesPrefill);
   modal.addComponents(new ActionRowBuilder().addComponents(notes));
+
+  // Optional arrival field, pre-filled from the report's first_eta.
+  if (!config.noDeadline) {
+    const arrival = new TextInputBuilder()
+      .setCustomId('arrival')
+      .setLabel('Impact time (UTC) — optional')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setPlaceholder('or just type it here · 14:30:45 · in 2h30m')
+      .setMaxLength(60);
+    if (report.first_eta) arrival.setValue(formatDeadline(report.first_eta));
+    modal.addComponents(new ActionRowBuilder().addComponents(arrival));
+  }
 
   return interaction.showModal(modal);
 }

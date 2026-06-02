@@ -3,7 +3,7 @@ import {
 } from 'discord.js';
 import { ROLE_BUTTON_PREFIX, ROLE_RESET_CUSTOM_ID, ROLE_SELECTIONS } from '../utils/roleSelection.js';
 
-export const PANEL_TYPES = ['offense', 'resources', 'scout', 'general', 'roles', 'timer', 'reports', 'leadership'];
+export const PANEL_TYPES = ['offense', 'resources', 'scout', 'general', 'roles', 'timer', 'reports', 'leadership', 'leadership-banner'];
 
 const COLOR = {
   defense:     0xe74c3c,
@@ -15,6 +15,7 @@ const COLOR = {
   timer:       0xf1c40f,
   reports:    0xe67e22,
   leadership: 0x1abc9c,
+  'leadership-banner': 0x1abc9c,
 };
 
 function btn(customId, label, emoji, style = ButtonStyle.Secondary) {
@@ -72,6 +73,7 @@ const titles = {
   timer:       '⏱️ Timer Control',
   reports:    '📥 Incoming Attack Reports',
   leadership: '🧠 Leadership Intel',
+  'leadership-banner': '📨 Leadership — Incoming Reports',
 };
 
 const descriptions = {
@@ -92,11 +94,17 @@ const descriptions = {
   ].join('\n'),
   reports:    'Report incoming attacks. Leadership + Defense Coordinator will be pinged automatically.',
   leadership: 'Pinned intelligence dashboard. Drill down by target or attacker, widen the time window, or refresh. Leadership / Def Coord can post Active Def and Perma Def calls directly from here.',
+  'leadership-banner': [
+    'Incoming attack reports land in this channel for Leadership / Def Coord triage.',
+    '',
+    'For drill-downs, the intel dashboard, and creating def calls, head to **#leadership-intel**.',
+  ].join('\n'),
 };
 
 const footers = {
   roles: 'You can change your selection later from this menu.',
   timer: 'Your timer is private — each click replies only to you.',
+  'leadership-banner': 'Reports appear below as they come in.',
 };
 
 const rowBuilders = {
@@ -181,4 +189,6 @@ const rowBuilders = {
       btn('intel:create_def_perma',  'Perma Def',  '🛡️', ButtonStyle.Primary),
     ),
   ],
+
+  'leadership-banner': () => [],
 };

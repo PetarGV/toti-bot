@@ -2,21 +2,13 @@ import { prepare, exec } from '../db/client.js';
 import { buildPanel, PANEL_TYPES } from './types.js';
 import { logger } from '../utils/logger.js';
 
-export async function deployPanel(interaction, type) {
-  if (!PANEL_TYPES.includes(type)) {
-    return interaction.reply({
-      content: `Unknown panel type. Choose: ${PANEL_TYPES.join(', ')}`,
-      ephemeral: true,
-    });
-  }
+const CHANNEL_CONFIG_KEYS = {
+  reports:             'reports_channel_id',
+  leadership:          'leadership_intel_channel_id',
+  'leadership-banner': 'leadership_channel_id',
+};
 
-  if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferReply({ ephemeral: true });
-  }
-
-  const channel = interaction.channel;
-
-  // Delete old panel message if it exists
+async function postPanelToChannel(channel, type) {
   const existing = prepare('SELECT message_id FROM panels WHERE channel_id = ?').get(channel.id);
   if (existing) {
     try {
@@ -41,16 +33,35 @@ export async function deployPanel(interaction, type) {
     VALUES (?, ?, ?)
   `).run(channel.id, type, msg.id);
 
-  const CHANNEL_CONFIG_KEYS = {
-    reports:    'reports_channel_id',
-    leadership: 'leadership_channel_id',
-  };
   if (CHANNEL_CONFIG_KEYS[type]) {
     prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)')
       .run(CHANNEL_CONFIG_KEYS[type], channel.id);
   }
+  return msg;
+}
+
+export async function deployPanel(interaction, type) {
+  if (!PANEL_TYPES.includes(type)) {
+    return interaction.reply({
+      content: `Unknown panel type. Choose: ${PANEL_TYPES.join(', ')}`,
+      ephemeral: true,
+    });
+  }
+
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply({ ephemeral: true });
+  }
+
+  const channel = interaction.channel;
+  await postPanelToChannel(channel, type);
 
   await interaction.editReply({ content: `✅ ${type} panel deployed and pinned.` });
+  logger.info(`Panel [${type}] deployed in #${channel.name} (${channel.id})`);
+}
+
+export async function deployPanelToChannel(channel, type) {
+  if (!PANEL_TYPES.includes(type)) throw new Error(`Unknown panel type: ${type}`);
+  await postPanelToChannel(channel, type);
   logger.info(`Panel [${type}] deployed in #${channel.name} (${channel.id})`);
 }
 

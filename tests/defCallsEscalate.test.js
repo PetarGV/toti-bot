@@ -70,7 +70,11 @@ test('report escalate active button opens a pre-filled def call modal', async ()
   assert.equal(componentById(json, 'coords').value, '(-12|34)');
   assert.match(componentById(json, 'notes').value, /Wave spread 6s/);
   assert.match(componentById(json, 'notes').value, /in-between def possible/);
-  assert.equal(componentById(json, 'arrival'), undefined, 'arrival field must be absent from modal');
+  // arrival is now present, pre-filled with the report's first_eta as a UTC timestamp.
+  const arrival = componentById(json, 'arrival');
+  assert.ok(arrival, 'arrival field should be present');
+  assert.equal(arrival.required, false);
+  assert.equal(arrival.value, '2030-03-17 17:46:40', 'arrival pre-fill should equal formatDeadline(first_eta)');
 });
 
 test('from-report def call modal replies with picker page 1 instead of creating call', async () => {
@@ -94,6 +98,7 @@ test('from-report def call modal replies with picker page 1 instead of creating 
           coords: '(-12|34)',
           troops_needed: '5,000',
           notes: 'Wave gap ~2.0s - in-between def possible',
+          arrival: '',          // ← empty arrival forces the picker
         }[name] ?? '';
       },
     },
@@ -117,4 +122,164 @@ test('from-report def call modal replies with picker page 1 instead of creating 
   assert.equal(interaction._editedTo.components.length, 5);
   assert.match(interaction._editedTo.content, /Report ETA: 2030-03-17 17:46:40 UTC/);
   assert.match(interaction._editedTo.content, /Pick impact time/);
+});
+
+test('from-report def call modal with valid future arrival creates call directly', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+  delete process.env.DEF_ROLE_NAME;
+
+  const reportId = insertReport();
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
+
+  const futureIso = new Date(Date.now() + 3600_000).toISOString();
+  const guild = { id: 'g', roles: { cache: { find: () => null }, fetch: async () => ({ find: () => null }) } };
+  const interaction = {
+    customId: `combat:create_def_from_report:def_active:${reportId}`,
+    member: fakeMember(['Defense Coordinator']),
+    user: { id: 'coord-1' },
+    guild,
+    fields: {
+      getTextInputValue(name) {
+        return {
+          coords: '(-12|34)',
+          troops_needed: '5000',
+          notes: '',
+          arrival: futureIso,
+        }[name] ?? '';
+      },
+    },
+    client: { channels: { fetch: async () => ({ guild, send: async () => ({ id: 'sent-1' }) }) } },
+    reply: async (p) => { interaction._replied = p; },
+  };
+
+  await routeModal(interaction);
+
+  const call = prepare('SELECT * FROM calls WHERE type = ?').get('def_active');
+  assert.ok(call, 'expected call to be created directly');
+  assert.equal(call.x, -12);
+  assert.equal(call.y, 34);
+  assert.match(interaction._replied.content, /Call #\d+ posted/);
+});
+
+test('def_active panel button opens modal with optional arrival field', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+
+  const interaction = {
+    customId: 'call:def_active',
+    member: fakeMember(['Leadership']),
+    user: { id: 'leader-1' },
+    showModal: async modal => { interaction.modal = modal; },
+  };
+  await routeButton(interaction);
+
+  assert.ok(interaction.modal, 'expected a modal');
+  const json = interaction.modal.toJSON();
+  const arrival = componentById(json, 'arrival');
+  assert.ok(arrival, 'arrival field should be present for def_active');
+  assert.equal(arrival.required, false);
+  assert.match(arrival.placeholder, /or just type it here/);
+});
+
+test('def_perma panel button modal has no arrival field', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+
+  const interaction = {
+    customId: 'call:def_perma',
+    member: fakeMember(['Leadership']),
+    user: { id: 'leader-1' },
+    showModal: async modal => { interaction.modal = modal; },
+  };
+  await routeButton(interaction);
+
+  assert.ok(interaction.modal, 'expected a modal');
+  const json = interaction.modal.toJSON();
+  assert.equal(componentById(json, 'arrival'), undefined, 'def_perma has no deadline, no arrival field');
+});
+
+test('from-report def call modal with unparseable arrival silently shows picker', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+  delete process.env.DEF_ROLE_NAME;
+
+  const reportId = insertReport();
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
+
+  const interaction = {
+    customId: `combat:create_def_from_report:def_active:${reportId}`,
+    member: fakeMember(['Defense Coordinator']),
+    user: { id: 'coord-1' },
+    fields: {
+      getTextInputValue(name) {
+        return {
+          coords: '(-12|34)',
+          troops_needed: '5000',
+          notes: '',
+          arrival: 'xyzzy not a real date',
+        }[name] ?? '';
+      },
+    },
+    client: { channels: { fetch: async () => ({}) } },
+    _editedTo: null,
+    _replied: null,
+    reply: async () => ({ id: 'eph-1' }),
+    editReply: async (payload) => { interaction._editedTo = payload; },
+  };
+
+  await routeModal(interaction);
+
+  // No call inserted, no error reply, picker shown.
+  const call = prepare('SELECT * FROM calls WHERE type = ?').get('def_active');
+  assert.equal(call, undefined);
+  assert.ok(interaction._editedTo, 'picker should be rendered via editReply');
+  assert.equal(interaction._editedTo.components.length, 5);
+  assert.match(interaction._editedTo.content, /Pick impact time/);
+});
+
+test('from-report def call modal with past arrival silently shows picker', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+  delete process.env.DEF_ROLE_NAME;
+
+  const reportId = insertReport();
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
+
+  const interaction = {
+    customId: `combat:create_def_from_report:def_active:${reportId}`,
+    member: fakeMember(['Defense Coordinator']),
+    user: { id: 'coord-1' },
+    fields: {
+      getTextInputValue(name) {
+        return {
+          coords: '(-12|34)',
+          troops_needed: '5000',
+          notes: '',
+          arrival: '2000-01-01 00:00:00',   // far past
+        }[name] ?? '';
+      },
+    },
+    client: { channels: { fetch: async () => ({}) } },
+    _editedTo: null,
+    reply: async () => ({ id: 'eph-1' }),
+    editReply: async (payload) => { interaction._editedTo = payload; },
+  };
+
+  await routeModal(interaction);
+
+  const call = prepare('SELECT * FROM calls WHERE type = ?').get('def_active');
+  assert.equal(call, undefined);
+  assert.ok(interaction._editedTo, 'picker should be rendered via editReply');
+  assert.equal(interaction._editedTo.components.length, 5);
 });
