@@ -204,3 +204,82 @@ test('def_perma panel button modal has no arrival field', async () => {
   const json = interaction.modal.toJSON();
   assert.equal(componentById(json, 'arrival'), undefined, 'def_perma has no deadline, no arrival field');
 });
+
+test('from-report def call modal with unparseable arrival silently shows picker', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+  delete process.env.DEF_ROLE_NAME;
+
+  const reportId = insertReport();
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
+
+  const interaction = {
+    customId: `combat:create_def_from_report:def_active:${reportId}`,
+    member: fakeMember(['Defense Coordinator']),
+    user: { id: 'coord-1' },
+    fields: {
+      getTextInputValue(name) {
+        return {
+          coords: '(-12|34)',
+          troops_needed: '5000',
+          notes: '',
+          arrival: 'xyzzy not a real date',
+        }[name] ?? '';
+      },
+    },
+    client: { channels: { fetch: async () => ({}) } },
+    _editedTo: null,
+    _replied: null,
+    reply: async () => ({ id: 'eph-1' }),
+    editReply: async (payload) => { interaction._editedTo = payload; },
+  };
+
+  await routeModal(interaction);
+
+  // No call inserted, no error reply, picker shown.
+  const call = prepare('SELECT * FROM calls WHERE type = ?').get('def_active');
+  assert.equal(call, undefined);
+  assert.ok(interaction._editedTo, 'picker should be rendered via editReply');
+  assert.equal(interaction._editedTo.components.length, 5);
+  assert.match(interaction._editedTo.content, /Pick impact time/);
+});
+
+test('from-report def call modal with past arrival silently shows picker', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+  delete process.env.DEF_ROLE_NAME;
+
+  const reportId = insertReport();
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
+
+  const interaction = {
+    customId: `combat:create_def_from_report:def_active:${reportId}`,
+    member: fakeMember(['Defense Coordinator']),
+    user: { id: 'coord-1' },
+    fields: {
+      getTextInputValue(name) {
+        return {
+          coords: '(-12|34)',
+          troops_needed: '5000',
+          notes: '',
+          arrival: '2000-01-01 00:00:00',   // far past
+        }[name] ?? '';
+      },
+    },
+    client: { channels: { fetch: async () => ({}) } },
+    _editedTo: null,
+    reply: async () => ({ id: 'eph-1' }),
+    editReply: async (payload) => { interaction._editedTo = payload; },
+  };
+
+  await routeModal(interaction);
+
+  const call = prepare('SELECT * FROM calls WHERE type = ?').get('def_active');
+  assert.equal(call, undefined);
+  assert.ok(interaction._editedTo, 'picker should be rendered via editReply');
+  assert.equal(interaction._editedTo.components.length, 5);
+});
