@@ -58,18 +58,21 @@ export function buildHeaderText(state) {
   return `${datePart} ${hourPart}:${minPart}:${secPart} UTC`;
 }
 
-// Resolve picker state to a unix timestamp, defaulting missing seconds to 00.
-// Returns null if date/hour/minute components are not all set.
+// Resolve picker state to a unix timestamp. Requires date/hour/mt/mo to be set.
+// Seconds default to :00 if either st or so is unset.
 export function resolveStateToUnix(state) {
-  if (state.dateOffset == null || state.hour == null || state.minute == null) return null;
+  if (state.dateOffset == null || state.hour == null) return null;
+  if (state.mt == null || state.mo == null) return null;
+  const minute = state.mt * 10 + state.mo;
+  const second = (state.st != null && state.so != null) ? state.st * 10 + state.so : 0;
   const now = new Date();
   const utcMs = Date.UTC(
     now.getUTCFullYear(),
     now.getUTCMonth(),
     now.getUTCDate() + state.dateOffset,
     state.hour,
-    state.minute,
-    state.second ?? 0,
+    minute,
+    second,
   );
   return Math.floor(utcMs / 1000);
 }

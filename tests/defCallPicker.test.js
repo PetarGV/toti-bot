@@ -51,11 +51,12 @@ test('buildHeaderText: full — all components', () => {
 
 test('resolveStateToUnix: incomplete state returns null', () => {
   assert.equal(resolveStateToUnix({ dateOffset: 0, hour: 14 }), null);
+  assert.equal(resolveStateToUnix({ dateOffset: 0, hour: 14, mt: 3 }), null);
   assert.equal(resolveStateToUnix({}), null);
 });
 
-test('resolveStateToUnix: defaults seconds to 00', () => {
-  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, minute: 30 });
+test('resolveStateToUnix: defaults seconds to 00 when st/so unset', () => {
+  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, mt: 3, mo: 0 });
   const now = new Date();
   const want = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14, 30, 0) / 1000;
   assert.equal(got, want);
@@ -73,9 +74,16 @@ test('buildPickerPage1: includes report ETA when escalation state present', () =
 });
 
 test('resolveStateToUnix: explicit seconds applied correctly', () => {
-  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, minute: 30, second: 15 });
+  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, mt: 3, mo: 0, st: 1, so: 5 });
   const now = new Date();
   const want = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14, 30, 15) / 1000;
+  assert.equal(got, want);
+});
+
+test('resolveStateToUnix: partial seconds (st set, so unset) defaults to :00', () => {
+  const got = resolveStateToUnix({ dateOffset: 0, hour: 14, mt: 3, mo: 0, st: 4 });
+  const now = new Date();
+  const want = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 14, 30, 0) / 1000;
   assert.equal(got, want);
 });
 
