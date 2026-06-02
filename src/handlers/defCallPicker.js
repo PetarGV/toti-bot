@@ -84,9 +84,7 @@ function dateLabel(offset) {
   return `Day after (${datePart} UTC)`;
 }
 
-// 5-unit steps keep the option count at 12, well within Discord's 25-option limit.
-const MINUTE_SECOND_STEPS = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-
+// Page 1: date, hour, minute (tens + ones) + Type instead / Next buttons.
 export function buildPickerPage1(msgId, state) {
   const reportLine = state.reportFirstEta
     ? `Report ETA: ${formatDeadline(state.reportFirstEta)} UTC\n`
@@ -96,7 +94,11 @@ export function buildPickerPage1(msgId, state) {
   const dateSelect = new StringSelectMenuBuilder()
     .setCustomId(`combat:newpick:date:${msgId}`)
     .setPlaceholder(state.dateOffset == null ? 'Date' : dateLabel(state.dateOffset))
-    .addOptions([0, 1, 2].map(o => ({ label: dateLabel(o), value: String(o), default: state.dateOffset === o })));
+    .addOptions([0, 1, 2].map(o => ({
+      label: dateLabel(o),
+      value: String(o),
+      default: state.dateOffset === o,
+    })));
 
   const hourSelect = new StringSelectMenuBuilder()
     .setCustomId(`combat:newpick:hour:${msgId}`)
@@ -107,22 +109,22 @@ export function buildPickerPage1(msgId, state) {
       default: state.hour === h,
     })));
 
-  const minuteSelect = new StringSelectMenuBuilder()
-    .setCustomId(`combat:newpick:minute:${msgId}`)
-    .setPlaceholder(state.minute == null ? 'Minute (UTC)' : `Min: ${String(state.minute).padStart(2, '0')}`)
-    .addOptions(MINUTE_SECOND_STEPS.map(v => ({
-      label: String(v).padStart(2, '0'),
-      value: String(v),
-      default: state.minute === v,
+  const mtSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:newpick:mt:${msgId}`)
+    .setPlaceholder(state.mt == null ? 'Minute (tens)' : `Min tens: ${state.mt}`)
+    .addOptions([0, 1, 2, 3, 4, 5].map(d => ({
+      label: String(d),
+      value: String(d),
+      default: state.mt === d,
     })));
 
-  const secondSelect = new StringSelectMenuBuilder()
-    .setCustomId(`combat:newpick:second:${msgId}`)
-    .setPlaceholder(state.second == null ? 'Second (or skip for :00)' : `Sec: ${String(state.second).padStart(2, '0')}`)
-    .addOptions(MINUTE_SECOND_STEPS.map(v => ({
-      label: String(v).padStart(2, '0'),
-      value: String(v),
-      default: state.second === v,
+  const moSelect = new StringSelectMenuBuilder()
+    .setCustomId(`combat:newpick:mo:${msgId}`)
+    .setPlaceholder(state.mo == null ? 'Minute (ones)' : `Min ones: ${state.mo}`)
+    .addOptions(Array.from({ length: 10 }, (_, d) => ({
+      label: String(d),
+      value: String(d),
+      default: state.mo === d,
     })));
 
   const typeBtn = new ButtonBuilder()
@@ -131,11 +133,11 @@ export function buildPickerPage1(msgId, state) {
     .setLabel('Type instead')
     .setEmoji('⌨️');
 
-  const createBtn = new ButtonBuilder()
-    .setCustomId(`combat:newpick:create:${msgId}`)
-    .setStyle(ButtonStyle.Success)
-    .setLabel('Create call')
-    .setEmoji('✅');
+  const nextBtn = new ButtonBuilder()
+    .setCustomId(`combat:newpick:next:${msgId}`)
+    .setStyle(ButtonStyle.Primary)
+    .setLabel('Next')
+    .setEmoji('➡️');
 
   return {
     content,
@@ -143,9 +145,9 @@ export function buildPickerPage1(msgId, state) {
     components: [
       new ActionRowBuilder().addComponents(dateSelect),
       new ActionRowBuilder().addComponents(hourSelect),
-      new ActionRowBuilder().addComponents(minuteSelect),
-      new ActionRowBuilder().addComponents(secondSelect),
-      new ActionRowBuilder().addComponents(typeBtn, createBtn),
+      new ActionRowBuilder().addComponents(mtSelect),
+      new ActionRowBuilder().addComponents(moSelect),
+      new ActionRowBuilder().addComponents(typeBtn, nextBtn),
     ],
   };
 }

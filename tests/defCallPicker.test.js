@@ -68,6 +68,26 @@ test('buildPickerPage1: emits 5 action rows', () => {
   assert.equal(payload.ephemeral, true);
 });
 
+test('buildPickerPage1: components are date/hour/mt/mo selects + type_instead/next buttons', () => {
+  const payload = buildPickerPage1('msg-1', {});
+  const customIds = payload.components.flatMap(row => row.components).map(c => c.data?.custom_id);
+  assert.ok(customIds.includes('combat:newpick:date:msg-1'), 'date select missing');
+  assert.ok(customIds.includes('combat:newpick:hour:msg-1'), 'hour select missing');
+  assert.ok(customIds.includes('combat:newpick:mt:msg-1'),   'mt select missing');
+  assert.ok(customIds.includes('combat:newpick:mo:msg-1'),   'mo select missing');
+  assert.ok(customIds.includes('combat:newpick:type_instead:msg-1'), 'type_instead button missing');
+  assert.ok(customIds.includes('combat:newpick:next:msg-1'), 'next button missing');
+});
+
+test('buildPickerPage1: mt select has 6 options (0-5), mo select has 10 options (0-9)', () => {
+  const payload = buildPickerPage1('msg-1', {});
+  const all = payload.components.flatMap(row => row.components);
+  const mt = all.find(c => c.data?.custom_id === 'combat:newpick:mt:msg-1');
+  const mo = all.find(c => c.data?.custom_id === 'combat:newpick:mo:msg-1');
+  assert.equal(mt.options.length, 6);
+  assert.equal(mo.options.length, 10);
+});
+
 test('buildPickerPage1: includes report ETA when escalation state present', () => {
   const payload = buildPickerPage1('msg-1', { reportFirstEta: 1_900_000_000 });
   assert.match(payload.content, /Report ETA: 2030-03-17 17:46:40 UTC/);
