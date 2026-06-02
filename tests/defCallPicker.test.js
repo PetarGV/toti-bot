@@ -34,8 +34,18 @@ test('buildHeaderText: partial — date + hour', () => {
   assert.match(header, /^\d{4}-\d{2}-\d{2} 14:__:__ UTC$/);
 });
 
+test('buildHeaderText: partial — minute tens only renders as __', () => {
+  const header = buildHeaderText({ dateOffset: 0, hour: 14, mt: 3 });
+  assert.match(header, /^\d{4}-\d{2}-\d{2} 14:__:__ UTC$/);
+});
+
+test('buildHeaderText: full minute (mt+mo), no seconds', () => {
+  const header = buildHeaderText({ dateOffset: 0, hour: 14, mt: 3, mo: 0 });
+  assert.match(header, /^\d{4}-\d{2}-\d{2} 14:30:__ UTC$/);
+});
+
 test('buildHeaderText: full — all components', () => {
-  const header = buildHeaderText({ dateOffset: 1, hour: 14, minute: 30, second: 45 });
+  const header = buildHeaderText({ dateOffset: 1, hour: 14, mt: 3, mo: 0, st: 4, so: 5 });
   assert.match(header, /^\d{4}-\d{2}-\d{2} 14:30:45 UTC$/);
 });
 

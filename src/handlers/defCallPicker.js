@@ -53,8 +53,8 @@ export function buildHeaderText(state) {
     ? '____-__-__'
     : utcDateString(state.dateOffset);
   const hourPart = state.hour == null ? '__' : String(state.hour).padStart(2, '0');
-  const minPart = state.minute == null ? '__' : String(state.minute).padStart(2, '0');
-  const secPart = state.second == null ? '__' : String(state.second).padStart(2, '0');
+  const minPart = (state.mt == null || state.mo == null) ? '__' : `${state.mt}${state.mo}`;
+  const secPart = (state.st == null || state.so == null) ? '__' : `${state.st}${state.so}`;
   return `${datePart} ${hourPart}:${minPart}:${secPart} UTC`;
 }
 
