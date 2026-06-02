@@ -70,7 +70,11 @@ test('report escalate active button opens a pre-filled def call modal', async ()
   assert.equal(componentById(json, 'coords').value, '(-12|34)');
   assert.match(componentById(json, 'notes').value, /Wave spread 6s/);
   assert.match(componentById(json, 'notes').value, /in-between def possible/);
-  assert.equal(componentById(json, 'arrival'), undefined, 'arrival field must be absent from modal');
+  // arrival is now present, pre-filled with the report's first_eta as a UTC timestamp.
+  const arrival = componentById(json, 'arrival');
+  assert.ok(arrival, 'arrival field should be present');
+  assert.equal(arrival.required, false);
+  assert.equal(arrival.value, '2030-03-17 17:46:40', 'arrival pre-fill should equal formatDeadline(first_eta)');
 });
 
 test('from-report def call modal replies with picker page 1 instead of creating call', async () => {

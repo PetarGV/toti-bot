@@ -465,6 +465,19 @@ async function showEscalateModal(interaction, type, reportId) {
   if (notesPrefill) notes.setValue(notesPrefill);
   modal.addComponents(new ActionRowBuilder().addComponents(notes));
 
+  // Optional arrival field, pre-filled from the report's first_eta.
+  if (!config.noDeadline) {
+    const arrival = new TextInputBuilder()
+      .setCustomId('arrival')
+      .setLabel('Impact time (UTC) — optional')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(false)
+      .setPlaceholder('or just type it here · 14:30:45 · in 2h30m')
+      .setMaxLength(60);
+    if (report.first_eta) arrival.setValue(formatDeadline(report.first_eta));
+    modal.addComponents(new ActionRowBuilder().addComponents(arrival));
+  }
+
   return interaction.showModal(modal);
 }
 
