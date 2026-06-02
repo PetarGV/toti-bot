@@ -263,15 +263,24 @@ export async function handlePickerTypeInsteadButton(interaction) {
   await interaction.showModal(modal);
 }
 
-// Stub handlers — real Next/Back implementations land in Tasks 6 and 7.
-// Until then, clicking them returns the friendly "session expired" message.
 export async function handlePickerNextButton(interaction) {
-  return interaction.update({
-    content: '⏱️ Picker session expired — please re-open the call.',
-    components: [],
-  });
+  const msgId = _parseMsgId(interaction.customId);
+  const state = pickerState.get(msgId);
+  if (await _expiredOrMissing(interaction, state)) return;
+
+  if (state.dateOffset == null || state.hour == null || state.mt == null || state.mo == null) {
+    return interaction.reply({
+      content: '❌ Pick date, hour, and minutes first.',
+      ephemeral: true,
+    });
+  }
+
+  const payload = buildPickerPage2(msgId, state);
+  await interaction.update({ content: payload.content, components: payload.components });
 }
 
+// Stub handler — real Back implementation lands in Task 7. For now it returns
+// the friendly "session expired" message just like the legacy fallback.
 export async function handlePickerBackButton(interaction) {
   return interaction.update({
     content: '⏱️ Picker session expired — please re-open the call.',

@@ -180,8 +180,33 @@ function fakeButtonInteraction(customId) {
   };
 }
 
-test('handlePickerNextButton: returns expired message (legacy button)', async () => {
+test('handlePickerNextButton: with full page-1 state transitions to page 2', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-N1', {
+    type: 'def_active', dateOffset: 0, hour: 14, mt: 3, mo: 0, st: null, so: null,
+    createdAt: Date.now(),
+  });
   const interaction = fakeButtonInteraction('combat:newpick:next:msg-N1');
+  await handlePickerNextButton(interaction);
+  assert.equal(interaction._updated.components.length, 3, 'page 2 should be rendered');
+  assert.match(interaction._updated.content, /Seconds/);
+});
+
+test('handlePickerNextButton: without complete page-1 state replies with error', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-N2', {
+    type: 'def_active', dateOffset: 0, hour: 14, mt: null, mo: null, st: null, so: null,
+    createdAt: Date.now(),
+  });
+  const interaction = fakeButtonInteraction('combat:newpick:next:msg-N2');
+  await handlePickerNextButton(interaction);
+  assert.ok(interaction._replied, 'expected an ephemeral reply');
+  assert.match(interaction._replied.content, /Pick date, hour, and minutes/);
+});
+
+test('handlePickerNextButton: expired state returns friendly error', async () => {
+  _resetPickerStateForTests();
+  const interaction = fakeButtonInteraction('combat:newpick:next:msg-N3-MISSING');
   await handlePickerNextButton(interaction);
   assert.equal(interaction._updated.components.length, 0);
   assert.match(interaction._updated.content, /expired/i);
