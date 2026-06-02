@@ -17,7 +17,10 @@ import { COMBAT_CONFIG } from './combat.js';
 import { rebuildDashboard } from './intel.js';
 
 function getDefCallsChannelId() {
+  // Prefer the explicit def-calls channel; fall back through the leadership-intel and legacy
+  // leadership keys so pre-split installs keep working until an admin configures def-calls.
   return prepare('SELECT value FROM config WHERE key=?').get('def_calls_channel_id')?.value
+    ?? prepare('SELECT value FROM config WHERE key=?').get('leadership_intel_channel_id')?.value
     ?? prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value
     ?? null;
 }

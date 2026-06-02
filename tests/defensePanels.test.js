@@ -2,10 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PANEL_TYPES, buildPanel } from '../src/panel/types.js';
 
-test('PANEL_TYPES includes reports, def-calls, leadership', () => {
+test('PANEL_TYPES includes reports, leadership, leadership-banner', () => {
   assert.ok(PANEL_TYPES.includes('reports'));
-  assert.ok(PANEL_TYPES.includes('def-calls'));
   assert.ok(PANEL_TYPES.includes('leadership'));
+  assert.ok(PANEL_TYPES.includes('leadership-banner'));
 });
 
 test('reports panel exposes report:choose button', () => {
@@ -14,15 +14,15 @@ test('reports panel exposes report:choose button', () => {
   assert.ok(ids.includes('report:choose'));
 });
 
-test('def-calls panel exposes call:def_active and call:def_perma', () => {
-  const out = buildPanel('def-calls');
-  const ids = out.components.flatMap(row => row.components.map(c => c.data.custom_id));
-  assert.ok(ids.includes('call:def_active'));
-  assert.ok(ids.includes('call:def_perma'));
-});
-
-test('leadership panel exposes intel:refresh button', () => {
+test('leadership panel exposes intel buttons and def-call creation buttons', () => {
   const out = buildPanel('leadership');
   const ids = out.components.flatMap(row => row.components.map(c => c.data.custom_id));
   assert.ok(ids.includes('intel:refresh'));
+  assert.ok(ids.includes('intel:create_def_active'));
+  assert.ok(ids.includes('intel:create_def_perma'));
+});
+
+test('leadership-banner panel has no interactive components', () => {
+  const out = buildPanel('leadership-banner');
+  assert.deepEqual(out.components, []);
 });

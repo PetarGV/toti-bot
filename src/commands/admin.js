@@ -3,7 +3,7 @@ import { existsSync, readFileSync, statSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { setConfig, getConfig, exec, prepare, transaction, flushDb } from '../db/client.js';
-import { deployPanel } from '../panel/deploy.js';
+import { deployPanel, deployPanelToChannel } from '../panel/deploy.js';
 import { fetchMap } from '../jobs/mapFetch.js';
 import { backupNow } from '../jobs/backup.js';
 import { discordTimestamp } from '../utils/time.js';
@@ -409,6 +409,23 @@ export async function handleAdmin(interaction) {
     return interaction.reply({
       content: `✅ Def calls channel set to <#${channel.id}>. Active Def and Perma Def embeds will be posted there.`,
       ephemeral: true,
+    });
+  }
+
+  if (sub === 'set-leadership-channel') {
+    const channel = interaction.options.getChannel('channel');
+    await interaction.deferReply({ ephemeral: true });
+    try {
+      const fetched = await interaction.client.channels.fetch(channel.id);
+      await deployPanelToChannel(fetched, 'leadership-banner');
+    } catch (err) {
+      logger.warn('leadership-banner deploy failed:', err.message);
+      return interaction.editReply({
+        content: `⚠️ Set leadership channel to <#${channel.id}>, but could not post the banner: ${err.message}`,
+      });
+    }
+    return interaction.editReply({
+      content: `✅ Leadership channel set to <#${channel.id}>. Incoming attack reports will be posted there and a pinned banner has been deployed.`,
     });
   }
 

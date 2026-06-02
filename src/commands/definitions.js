@@ -69,6 +69,11 @@ export const commandDefinitions = [
         .addChannelOption(o => o.setName('channel').setDescription('Def calls channel').setRequired(true))
     )
     .addSubcommand(s =>
+      s.setName('set-leadership-channel')
+        .setDescription('Set the channel where incoming attack reports are posted (separate from /setup leadership)')
+        .addChannelOption(o => o.setName('channel').setDescription('Leadership reports channel').setRequired(true))
+    )
+    .addSubcommand(s =>
       s.setName('set-welcome-channel')
         .setDescription('Set the channel where new members get the onboarding greeting')
         .addChannelOption(o => o.setName('channel').setDescription('Welcome channel').setRequired(true))

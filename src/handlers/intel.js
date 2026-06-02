@@ -209,7 +209,11 @@ export function buildDashboardComponents() {
 }
 
 function getLeadershipChannelId() {
-  return prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value ?? null;
+  // Intel dashboard lives in leadership-intel; fall back to leadership_channel_id for installs
+  // that pre-date the channel split (where /setup leadership used to set leadership_channel_id).
+  return prepare('SELECT value FROM config WHERE key=?').get('leadership_intel_channel_id')?.value
+    ?? prepare('SELECT value FROM config WHERE key=?').get('leadership_channel_id')?.value
+    ?? null;
 }
 
 export async function rebuildDashboard(client) {
