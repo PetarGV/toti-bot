@@ -214,22 +214,27 @@ function _expiredOrMissing(interaction, state) {
 
 export async function handlePickerSelect(interaction) {
   const id = interaction.customId;
-  const part = id.split(':')[2];           // 'date' | 'hour' | 'mt' | 'mo'  (Task 5 will add 'st' | 'so')
+  const part = id.split(':')[2];           // 'date' | 'hour' | 'mt' | 'mo' | 'st' | 'so'
   const msgId = _parseMsgId(id);
   const state = pickerState.get(msgId);
   if (await _expiredOrMissing(interaction, state)) return;
 
   const value = parseInt(interaction.values[0], 10);
   switch (part) {
-    case 'date':   state.dateOffset = value; break;
-    case 'hour':   state.hour = value; break;
-    case 'mt':     state.mt = value; break;
-    case 'mo':     state.mo = value; break;
+    case 'date': state.dateOffset = value; break;
+    case 'hour': state.hour = value; break;
+    case 'mt':   state.mt = value; break;
+    case 'mo':   state.mo = value; break;
+    case 'st':   state.st = value; break;
+    case 'so':   state.so = value; break;
     default:
       return interaction.update({ content: '❌ Unknown picker control.', components: [] });
   }
 
-  const payload = buildPickerPage1(msgId, state);
+  // Re-render the page the user is currently on:
+  //   mt/mo and date/hour are on page 1; st/so are on page 2.
+  const onPage2 = part === 'st' || part === 'so';
+  const payload = onPage2 ? buildPickerPage2(msgId, state) : buildPickerPage1(msgId, state);
   await interaction.update({ content: payload.content, components: payload.components });
 }
 
