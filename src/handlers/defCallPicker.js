@@ -279,13 +279,13 @@ export async function handlePickerNextButton(interaction) {
   await interaction.update({ content: payload.content, components: payload.components });
 }
 
-// Stub handler — real Back implementation lands in Task 7. For now it returns
-// the friendly "session expired" message just like the legacy fallback.
 export async function handlePickerBackButton(interaction) {
-  return interaction.update({
-    content: '⏱️ Picker session expired — please re-open the call.',
-    components: [],
-  });
+  const msgId = _parseMsgId(interaction.customId);
+  const state = pickerState.get(msgId);
+  if (await _expiredOrMissing(interaction, state)) return;
+
+  const payload = buildPickerPage1(msgId, state);
+  await interaction.update({ content: payload.content, components: payload.components });
 }
 
 export async function handlePickerCreateButton(interaction) {

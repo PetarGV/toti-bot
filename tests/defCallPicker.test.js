@@ -212,8 +212,27 @@ test('handlePickerNextButton: expired state returns friendly error', async () =>
   assert.match(interaction._updated.content, /expired/i);
 });
 
-test('handlePickerBackButton: returns expired message (legacy button)', async () => {
+test('handlePickerBackButton: with state returns to page 1 preserving values', async () => {
+  _resetPickerStateForTests();
+  _setPickerStateForTests('msg-B1', {
+    type: 'def_active', dateOffset: 0, hour: 14, mt: 3, mo: 0, st: 4, so: 5,
+    createdAt: Date.now(),
+  });
   const interaction = fakeButtonInteraction('combat:newpick:back:msg-B1');
+  await handlePickerBackButton(interaction);
+  assert.equal(interaction._updated.components.length, 5, 'page 1 should be rendered');
+  assert.match(interaction._updated.content, /Pick impact time/);
+  // State preserved
+  const state = _getPickerStateForTests('msg-B1');
+  assert.equal(state.mt, 3);
+  assert.equal(state.mo, 0);
+  assert.equal(state.st, 4);
+  assert.equal(state.so, 5);
+});
+
+test('handlePickerBackButton: expired state returns friendly error', async () => {
+  _resetPickerStateForTests();
+  const interaction = fakeButtonInteraction('combat:newpick:back:msg-B2-MISSING');
   await handlePickerBackButton(interaction);
   assert.equal(interaction._updated.components.length, 0);
   assert.match(interaction._updated.content, /expired/i);
