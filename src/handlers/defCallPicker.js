@@ -169,7 +169,7 @@ function _expiredOrMissing(interaction, state) {
 
 export async function handlePickerSelect(interaction) {
   const id = interaction.customId;
-  const part = id.split(':')[2];           // 'date' | 'hour' | 'minute' | 'second'
+  const part = id.split(':')[2];           // 'date' | 'hour' | 'mt' | 'mo'  (Task 5 will add 'st' | 'so')
   const msgId = _parseMsgId(id);
   const state = pickerState.get(msgId);
   if (await _expiredOrMissing(interaction, state)) return;
@@ -178,8 +178,8 @@ export async function handlePickerSelect(interaction) {
   switch (part) {
     case 'date':   state.dateOffset = value; break;
     case 'hour':   state.hour = value; break;
-    case 'minute': state.minute = value; break;
-    case 'second': state.second = value; break;
+    case 'mt':     state.mt = value; break;
+    case 'mo':     state.mo = value; break;
     default:
       return interaction.update({ content: '❌ Unknown picker control.', components: [] });
   }
@@ -213,8 +213,8 @@ export async function handlePickerTypeInsteadButton(interaction) {
   await interaction.showModal(modal);
 }
 
-// Legacy handlers — Next/Back buttons no longer appear in the picker UI.
-// Kept to avoid routing errors from any stale messages still in Discord.
+// Stub handlers — real Next/Back implementations land in Tasks 6 and 7.
+// Until then, clicking them returns the friendly "session expired" message.
 export async function handlePickerNextButton(interaction) {
   return interaction.update({
     content: '⏱️ Picker session expired — please re-open the call.',
