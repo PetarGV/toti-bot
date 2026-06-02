@@ -98,6 +98,7 @@ test('from-report def call modal replies with picker page 1 instead of creating 
           coords: '(-12|34)',
           troops_needed: '5,000',
           notes: 'Wave gap ~2.0s - in-between def possible',
+          arrival: '',          // ← empty arrival forces the picker
         }[name] ?? '';
       },
     },
@@ -121,6 +122,46 @@ test('from-report def call modal replies with picker page 1 instead of creating 
   assert.equal(interaction._editedTo.components.length, 5);
   assert.match(interaction._editedTo.content, /Report ETA: 2030-03-17 17:46:40 UTC/);
   assert.match(interaction._editedTo.content, /Pick impact time/);
+});
+
+test('from-report def call modal with valid future arrival creates call directly', async () => {
+  await setupTestDb();
+  resetTables();
+  process.env.LEADERSHIP_ROLE_NAME = 'Leadership';
+  process.env.DEF_COORD_ROLE_NAME = 'Defense Coordinator';
+  delete process.env.DEF_ROLE_NAME;
+
+  const reportId = insertReport();
+  prepare('INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)').run('def_calls_channel_id', 'def-channel');
+
+  const futureIso = new Date(Date.now() + 3600_000).toISOString();
+  const guild = { id: 'g', roles: { cache: { find: () => null }, fetch: async () => ({ find: () => null }) } };
+  const interaction = {
+    customId: `combat:create_def_from_report:def_active:${reportId}`,
+    member: fakeMember(['Defense Coordinator']),
+    user: { id: 'coord-1' },
+    guild,
+    fields: {
+      getTextInputValue(name) {
+        return {
+          coords: '(-12|34)',
+          troops_needed: '5000',
+          notes: '',
+          arrival: futureIso,
+        }[name] ?? '';
+      },
+    },
+    client: { channels: { fetch: async () => ({ guild, send: async () => ({ id: 'sent-1' }) }) } },
+    reply: async (p) => { interaction._replied = p; },
+  };
+
+  await routeModal(interaction);
+
+  const call = prepare('SELECT * FROM calls WHERE type = ?').get('def_active');
+  assert.ok(call, 'expected call to be created directly');
+  assert.equal(call.x, -12);
+  assert.equal(call.y, 34);
+  assert.match(interaction._replied.content, /Call #\d+ posted/);
 });
 
 test('def_active panel button opens modal with optional arrival field', async () => {

@@ -249,6 +249,23 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
     return interaction.reply({ content: `✅ Call #${callId} posted.`, ephemeral: true });
   }
 
+  // Fast path: optional `arrival` field on the modal. If it parses to a future
+  // timestamp, skip the picker entirely. Unparseable/past values silently fall
+  // through to the picker (per design — the user can correct via clicks).
+  let arrivalRaw = '';
+  try { arrivalRaw = interaction.fields.getTextInputValue('arrival') ?? ''; } catch { /* field absent — older modal */ }
+  if (arrivalRaw.trim()) {
+    const deadline = parseDeadline(arrivalRaw);
+    if (deadline != null && deadline >= unixNow()) {
+      const { callId, error } = await createDefCall(interaction, {
+        type, x: coords.x, y: coords.y, deadline, troopsNeeded, notes, sourceReportId,
+      });
+      if (error) return interaction.reply({ content: error, ephemeral: true });
+      return interaction.reply({ content: `✅ Call #${callId} posted.`, ephemeral: true });
+    }
+    // else: silent fall-through to picker
+  }
+
   // def_active: stash state, reply with picker page 1.
   const reportFirstEta = sourceReportId
     ? prepare('SELECT first_eta FROM incoming_reports WHERE id = ?').get(sourceReportId)?.first_eta ?? null
@@ -265,7 +282,7 @@ export async function handleDefCallCreateModal(interaction, sourceReportId = nul
   const state = {
     type, x: coords.x, y: coords.y, troopsNeeded, notes, sourceReportId,
     reportFirstEta,
-    dateOffset: null, hour: null, minute: null, second: null,
+    dateOffset: null, hour: null, mt: null, mo: null, st: null, so: null,
     createdAt: Date.now(),
     _pickerInteraction: interaction,  // used to clear picker controls after "Type instead" submit
   };
