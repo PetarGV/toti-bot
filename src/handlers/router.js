@@ -56,7 +56,7 @@ import {
 } from './scoutCall.js';
 import { handleStatusCommand, handleStatusButton } from './status.js';
 import { handleCallsCommand, handleCallsButton, handleCallsPage } from './callsList.js';
-import { handlePushReportPage } from './pushReport.js';
+import { handlePushReportPage, handlePushReportSelect, handlePushReportBack } from './pushReport.js';
 import {
   handleProfileButton, handleProfileModal, handleProfileCommand, handleNotifyToggle,
   handleEditIgnButton, handleEditIgnModal,
@@ -204,6 +204,7 @@ export async function routeButton(interaction) {
     if (id === 'onboard:set-coords')        return await handleOnboardSetCoordsButton(interaction);
     if (id.startsWith('calls:page:')) return await handleCallsPage(interaction);
     if (id.startsWith('admin:push-report:page:')) return await handlePushReportPage(interaction);
+    if (id.startsWith('admin:push-report:back:')) return await handlePushReportBack(interaction);
     if (id.startsWith(`${ROLE_BUTTON_PREFIX}:`)) return await handleRoleButton(interaction);
 
     // Specific single-id buttons first
@@ -312,6 +313,7 @@ export async function routeSelect(interaction) {
     if (id.startsWith('sync:pick-ambig:'))        return await handleAmbigPickSelect(interaction);
     if (id.startsWith('report:reclassify_pick:')) return await handleReclassifySelect(interaction);
     if (id === 'intel:window_pick') return await handleIntelWindowSelect(interaction);
+    if (id.startsWith('admin:push-report:select:')) return await handlePushReportSelect(interaction);
     return await interaction.reply({ content: 'Unknown selection.', ephemeral: true });
   } catch (err) {
     logger.error('Select error [%s]:', id, err);

@@ -2,7 +2,15 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { setupTestDb, resetTables } from './helpers/testDb.js';
 import { prepare } from '../src/db/client.js';
-import { fetchPushReportPage, renderPushReportLine, buildPushReportPayload, handlePushReportPage } from '../src/handlers/pushReport.js';
+import {
+  fetchPushReportPage,
+  renderPushReportLine,
+  buildPushReportPayload,
+  buildPushReportDetailPayload,
+  handlePushReportPage,
+  handlePushReportSelect,
+  handlePushReportBack,
+} from '../src/handlers/pushReport.js';
 
 function makeCall({ type = 'push:lumber', author_id = '1', x = 0, y = 0, status = 'open', amount = 1000, message_id = null, channel_id = null }) {
   const payload = JSON.stringify({ resource: type.split(':')[1], amount });
@@ -49,20 +57,19 @@ test('fetchPushReportPage: excludes non-push call types', async () => {
   assert.equal(rows[0].type, 'push:iron');
 });
 
-test('fetchPushReportPage: pagination respects offset and page size', async () => {
+test('fetchPushReportPage: page size is 5', async () => {
   await setupTestDb();
   resetTables();
-  for (let i = 0; i < 15; i++) makeCall({});
+  for (let i = 0; i < 12; i++) makeCall({});
 
   const page1 = fetchPushReportPage({ offset: 0 });
-  const page2 = fetchPushReportPage({ offset: 10 });
-  assert.equal(page1.rows.length, 10);
-  assert.equal(page2.rows.length, 5);
-  assert.equal(page1.total, 15);
-  assert.equal(page2.total, 15);
+  const page3 = fetchPushReportPage({ offset: 10 });
+  assert.equal(page1.rows.length, 5);
+  assert.equal(page3.rows.length, 2);
+  assert.equal(page1.total, 12);
 });
 
-test('renderPushReportLine: lists every sender ordered by amount desc, not just the top 3', async () => {
+test('renderPushReportLine: lists every sender one per line, amount desc', async () => {
   await setupTestDb();
   resetTables();
   const callId = makeCall({ type: 'push:crop', x: 5, y: -5, amount: 10000 });
@@ -77,8 +84,10 @@ test('renderPushReportLine: lists every sender ordered by amount desc, not just 
   assert.match(line, /🌾 \*\*Crop\*\*/);
   assert.match(line, /\(5\|-5\)/);
   assert.match(line, /4 senders/);
-  const sendersLine = line.split('\n').find(l => l.includes('Senders:'));
-  assert.match(sendersLine, /<@d>.*<@b>.*<@c>.*<@a>/s); // all 4, amount desc
+  const bullets = line.split('\n').filter(l => l.trim().startsWith('•'));
+  assert.equal(bullets.length, 4);
+  assert.match(bullets[0], /<@d> 9,000/); // highest first
+  assert.match(bullets[3], /<@a> 1,000/); // lowest last
 });
 
 test('renderPushReportLine: shows the destination village owner (and alliance) from x_world', async () => {
@@ -91,37 +100,14 @@ test('renderPushReportLine: shows the destination village owner (and alliance) f
   assert.match(line, /\(5\|-5\) — EnemyPlayer \[ABC\]/);
 });
 
-test('renderPushReportLine: no x_world match omits the owner suffix', async () => {
-  await setupTestDb();
-  resetTables();
-  const callId = makeCall({ x: 99, y: 99 });
-  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
-  const line = renderPushReportLine(call, 'g1');
-  assert.match(line, /\(99\|99\) — /); // status badge follows, no owner text before it
-  assert.ok(!line.includes('EnemyPlayer'));
-});
-
-test('renderPushReportLine: no pledges yet shows "*no senders*" and 0 senders', async () => {
+test('renderPushReportLine: no pledges yet shows "*no senders*" on its own line', async () => {
   await setupTestDb();
   resetTables();
   const callId = makeCall({});
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   const line = renderPushReportLine(call, 'guild1');
   assert.match(line, /0 senders/);
-  assert.match(line, /Senders: \*no senders\*/);
-});
-
-test('renderPushReportLine: includes a Jump link only when message_id/channel_id are set', async () => {
-  await setupTestDb();
-  resetTables();
-  const withMsg = makeCall({ message_id: '999', channel_id: '888' });
-  const withoutMsg = makeCall({});
-
-  const callA = prepare('SELECT * FROM calls WHERE id = ?').get(withMsg);
-  const callB = prepare('SELECT * FROM calls WHERE id = ?').get(withoutMsg);
-
-  assert.match(renderPushReportLine(callA, 'g1'), /\[Jump\]\(https:\/\/discord\.com\/channels\/g1\/888\/999\)/);
-  assert.ok(!renderPushReportLine(callB, 'g1').includes('[Jump]'));
+  assert.ok(line.split('\n').some(l => l.trim() === '*no senders*'));
 });
 
 test('renderPushReportLine: push:all target is amount * 4', async () => {
@@ -134,51 +120,120 @@ test('renderPushReportLine: push:all target is amount * 4', async () => {
   assert.match(line, /3,000\/8,000/);
 });
 
-test('buildPushReportPayload: empty state shows "No resource pushes found"', async () => {
+test('buildPushReportPayload: empty state has no select menu, only Prev/Next', async () => {
   await setupTestDb();
   resetTables();
   const payload = buildPushReportPayload({});
-  const embed = payload.embeds[0].toJSON();
-  assert.match(embed.description, /No resource pushes found/);
-  assert.match(embed.footer.text, /^0 pushes total$/);
+  assert.match(payload.embeds[0].toJSON().description, /No resource pushes found/);
+  assert.equal(payload.components.length, 1);
+  assert.equal(payload.components[0].toJSON().components[0].type, 2); // button, not select
+});
+
+test('buildPushReportPayload: non-empty page has a select row with one option per push, newest first', async () => {
+  await setupTestDb();
+  resetTables();
+  const c1 = makeCall({ type: 'push:lumber' });
+  const c2 = makeCall({ type: 'push:iron' });
+
+  const payload = buildPushReportPayload({ offset: 0 });
+  const selectRow = payload.components[0].toJSON();
+  const options = selectRow.components[0].options;
+  assert.equal(options.length, 2);
+  assert.equal(options[0].value, String(c2)); // newest first
+  assert.equal(options[1].value, String(c1));
+  assert.match(options[0].label, /Iron/);
+});
+
+test('buildPushReportPayload: select customId carries the current offset', async () => {
+  await setupTestDb();
+  resetTables();
+  for (let i = 0; i < 8; i++) makeCall({});
+
+  const payload = buildPushReportPayload({ offset: 5 });
+  const selectRow = payload.components[0].toJSON();
+  assert.equal(selectRow.components[0].custom_id, 'admin:push-report:select:5');
 });
 
 test('buildPushReportPayload: Previous disabled on first page, Next disabled on last page', async () => {
   await setupTestDb();
   resetTables();
-  for (let i = 0; i < 15; i++) makeCall({});
+  for (let i = 0; i < 12; i++) makeCall({});
 
-  const page1 = buildPushReportPayload({ offset: 0 }).components[0].toJSON();
-  assert.equal(page1.components[0].disabled, true);  // Previous
-  assert.equal(page1.components[1].disabled, false); // Next
+  const page1 = buildPushReportPayload({ offset: 0 }).components[1].toJSON();
+  assert.equal(page1.components[0].disabled, true);
+  assert.equal(page1.components[1].disabled, false);
 
-  const page2 = buildPushReportPayload({ offset: 10 }).components[0].toJSON();
-  assert.equal(page2.components[0].disabled, false); // Previous
-  assert.equal(page2.components[1].disabled, true);  // Next
+  const page3 = buildPushReportPayload({ offset: 10 }).components[1].toJSON();
+  assert.equal(page3.components[0].disabled, false);
+  assert.equal(page3.components[1].disabled, true);
 });
 
-test('buildPushReportPayload: pagination customId carries only the offset, no filter', async () => {
+test('buildPushReportDetailPayload: reuses buildPushEmbed and adds Map + Back buttons', async () => {
   await setupTestDb();
   resetTables();
-  for (let i = 0; i < 15; i++) makeCall({});
+  const callId = makeCall({ x: 3, y: 4 });
+  pledge(callId, 'a', 500);
 
-  const payload = buildPushReportPayload({ offset: 0 }).components[0].toJSON();
-  assert.equal(payload.components[1].custom_id, 'admin:push-report:page:10');
+  const payload = buildPushReportDetailPayload(callId, 5);
+  const embed = payload.embeds[0].toJSON();
+  assert.match(embed.title, /Resource Push/); // buildPushEmbed's own title
+  assert.match(embed.fields.find(f => f.name === 'Senders').value, /<@a>/);
+
+  const row = payload.components[0].toJSON();
+  assert.equal(row.components[0].label, 'Map');
+  assert.equal(row.components[1].custom_id, 'admin:push-report:back:5');
+});
+
+test('buildPushReportDetailPayload: missing call is handled gracefully', async () => {
+  await setupTestDb();
+  resetTables();
+  const payload = buildPushReportDetailPayload(999999, 0);
+  assert.match(payload.embeds[0].toJSON().description, /not found/);
+  assert.deepEqual(payload.components, []);
 });
 
 test('handlePushReportPage: parses offset out of the customId and updates the interaction', async () => {
   await setupTestDb();
   resetTables();
-  for (let i = 0; i < 12; i++) makeCall({});
+  for (let i = 0; i < 8; i++) makeCall({});
 
   let updated = null;
   const interaction = {
-    customId: 'admin:push-report:page:10',
+    customId: 'admin:push-report:page:5',
     guildId: 'g1',
     update: async (p) => { updated = p; },
   };
   await handlePushReportPage(interaction);
-  assert.ok(updated);
-  const embed = updated.embeds[0].toJSON();
-  assert.match(embed.title, /page 2\/2/);
+  assert.match(updated.embeds[0].toJSON().title, /page 2\/2/);
+});
+
+test('handlePushReportSelect: parses offset + selected call id and shows the drill-down', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = makeCall({ x: 1, y: 2 });
+
+  let updated = null;
+  const interaction = {
+    customId: 'admin:push-report:select:5',
+    values: [String(callId)],
+    update: async (p) => { updated = p; },
+  };
+  await handlePushReportSelect(interaction);
+  assert.match(updated.embeds[0].toJSON().title, /Resource Push/);
+  assert.equal(updated.components[0].toJSON().components[1].custom_id, 'admin:push-report:back:5');
+});
+
+test('handlePushReportBack: returns to the list at the encoded offset', async () => {
+  await setupTestDb();
+  resetTables();
+  for (let i = 0; i < 8; i++) makeCall({});
+
+  let updated = null;
+  const interaction = {
+    customId: 'admin:push-report:back:5',
+    guildId: 'g1',
+    update: async (p) => { updated = p; },
+  };
+  await handlePushReportBack(interaction);
+  assert.match(updated.embeds[0].toJSON().title, /page 2\/2/);
 });

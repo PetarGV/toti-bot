@@ -1,9 +1,21 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import {
+  EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
+  StringSelectMenuBuilder, StringSelectMenuOptionBuilder,
+} from 'discord.js';
 import { prepare } from '../db/client.js';
 import { formatCoords } from '../utils/coords.js';
 import { formatAmount, getResource } from '../utils/resources.js';
+import { mapUrl } from '../utils/travianUrl.js';
+import { buildPushEmbed } from './resourcePush.js';
 
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
+
+const STATUS_LABEL = {
+  open:    'Open',
+  filled:  'Filled',
+  closed:  'Closed',
+  expired: 'Expired',
+};
 
 const STATUS_BADGE = {
   filled:  '✅ Filled — ',
@@ -44,14 +56,14 @@ export function renderPushReportLine(call, guildId) {
     ? ` — [Jump](https://discord.com/channels/${guildId}/${call.channel_id}/${call.message_id})`
     : '';
   const destination = `${formatCoords(call.x, call.y)}${owner ? ` — ${owner}` : ''}`;
-  const senderList = senders.length
-    ? senders.map(s => `<@${s.user_id}> ${formatAmount(parseInt(s.amount, 10))}`).join(', ')
-    : '*no senders*';
+  const senderLines = senders.length
+    ? senders.map(s => `  • <@${s.user_id}> ${formatAmount(parseInt(s.amount, 10))}`).join('\n')
+    : '  *no senders*';
 
   return [
     `${resource.emoji} **${resource.label}** → ${destination} — ${badge}${jump}`,
     `  ${formatAmount(total)}/${formatAmount(target)} (${senders.length} sender${senders.length === 1 ? '' : 's'})`,
-    `  Senders: ${senderList}`,
+    senderLines,
   ].join('\n');
 }
 
@@ -62,6 +74,36 @@ export function fetchPushReportPage({ offset = 0 } = {}) {
   ).all(PAGE_SIZE, offset);
 
   return { rows, total };
+}
+
+function buildSelectOptionLabel(call) {
+  const payload = JSON.parse(call.payload || '{}');
+  const resource = getResource(payload.resource);
+  return `${resource.emoji} ${resource.label} → ${formatCoords(call.x, call.y)}`.slice(0, 100);
+}
+
+function buildSelectOptionDescription(call) {
+  const payload = JSON.parse(call.payload || '{}');
+  const target = computeTarget(call, payload);
+  const total = totalPledged(call.id);
+  const status = STATUS_LABEL[call.status] ?? call.status;
+  return `${status} — ${formatAmount(total)}/${formatAmount(target)}`.slice(0, 100);
+}
+
+function buildSelectRow(rows, offset) {
+  const options = rows.map(call =>
+    new StringSelectMenuOptionBuilder()
+      .setLabel(buildSelectOptionLabel(call))
+      .setDescription(buildSelectOptionDescription(call))
+      .setValue(String(call.id)),
+  );
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`admin:push-report:select:${offset}`)
+    .setPlaceholder('View a specific push…')
+    .addOptions(options);
+
+  return new ActionRowBuilder().addComponents(select);
 }
 
 export function buildPushReportPayload({ offset = 0, guildId = null } = {}) {
@@ -84,7 +126,7 @@ export function buildPushReportPayload({ offset = 0, guildId = null } = {}) {
   const prevDisabled = offset === 0;
   const nextDisabled = offset + PAGE_SIZE >= total;
 
-  const row = new ActionRowBuilder().addComponents(
+  const pageRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`admin:push-report:page:${Math.max(0, offset - PAGE_SIZE)}`)
       .setStyle(ButtonStyle.Secondary)
@@ -99,6 +141,27 @@ export function buildPushReportPayload({ offset = 0, guildId = null } = {}) {
       .setDisabled(nextDisabled),
   );
 
+  const components = rows.length ? [buildSelectRow(rows, offset), pageRow] : [pageRow];
+
+  return { embeds: [embed], components };
+}
+
+export function buildPushReportDetailPayload(callId, offset) {
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  if (!call) {
+    return { embeds: [new EmbedBuilder().setDescription('Push not found — it may have been deleted.')], components: [] };
+  }
+
+  const embed = buildPushEmbed(callId);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Map').setEmoji('🗺️').setURL(mapUrl(call.x, call.y)),
+    new ButtonBuilder()
+      .setCustomId(`admin:push-report:back:${offset}`)
+      .setStyle(ButtonStyle.Secondary)
+      .setLabel('Back to list')
+      .setEmoji('◀️'),
+  );
+
   return { embeds: [embed], components: [row] };
 }
 
@@ -109,8 +172,22 @@ export async function handlePushReportCommand(interaction) {
 
 export async function handlePushReportPage(interaction) {
   // admin:push-report:page:<offset>
-  const parts = interaction.customId.split(':');
-  const offset = parseInt(parts[3], 10) || 0;
+  const offset = parseInt(interaction.customId.split(':')[3], 10) || 0;
+  const payload = buildPushReportPayload({ offset, guildId: interaction.guildId });
+  return interaction.update(payload);
+}
+
+export async function handlePushReportSelect(interaction) {
+  // admin:push-report:select:<offset>
+  const offset = parseInt(interaction.customId.split(':')[3], 10) || 0;
+  const callId = parseInt(interaction.values[0], 10);
+  const payload = buildPushReportDetailPayload(callId, offset);
+  return interaction.update(payload);
+}
+
+export async function handlePushReportBack(interaction) {
+  // admin:push-report:back:<offset>
+  const offset = parseInt(interaction.customId.split(':')[3], 10) || 0;
   const payload = buildPushReportPayload({ offset, guildId: interaction.guildId });
   return interaction.update(payload);
 }
