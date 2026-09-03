@@ -74,6 +74,12 @@ const ID_FEATURE_PREFIXES = [
   ['offense', 'offense'],
   ['report', 'defense'],
   ['report-incoming', 'defense'],
+  // /report (pushes/roster) is a separate, always-on admin command whose
+  // customIds happen to share the "report" prefix with the incoming-reports
+  // panel above — these longer, more specific entries win over it and stay
+  // ungated regardless of the "defense" feature.
+  ['report:pushes', null],
+  ['report:roster', null],
   ['active-def', 'defense'],
   ['perma-def', 'defense'],
   ['sending-def', 'defense'],

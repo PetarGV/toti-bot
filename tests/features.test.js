@@ -83,6 +83,16 @@ test('featureForId: unmapped ids (core/admin/sync/onboarding) are ungated', () =
   assert.equal(featureForId('help:category'), null);
 });
 
+test('featureForId: /report (pushes/roster) buttons stay ungated despite sharing the "report" prefix with the defense-gated incoming-reports panel', () => {
+  assert.equal(featureForId('report:pushes:page:5'), null);
+  assert.equal(featureForId('report:pushes:select:0'), null);
+  assert.equal(featureForId('report:pushes:back:10'), null);
+  assert.equal(featureForId('report:roster:page:20'), null);
+  // the incoming-reports panel itself is still gated behind "defense"
+  assert.equal(featureForId('report:choose'), 'defense');
+  assert.equal(featureForId('report:manual_submit'), 'defense');
+});
+
 test('COMMAND_FEATURES omits always-on core commands', () => {
   for (const core of ['setup', 'admin', 'calls', 'help', 'translate']) {
     assert.equal(COMMAND_FEATURES[core], undefined);
