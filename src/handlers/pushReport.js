@@ -99,7 +99,7 @@ function buildSelectRow(rows, offset) {
   );
 
   const select = new StringSelectMenuBuilder()
-    .setCustomId(`admin:push-report:select:${offset}`)
+    .setCustomId(`report:pushes:select:${offset}`)
     .setPlaceholder('View a specific push…')
     .addOptions(options);
 
@@ -128,13 +128,13 @@ export function buildPushReportPayload({ offset = 0, guildId = null } = {}) {
 
   const pageRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`admin:push-report:page:${Math.max(0, offset - PAGE_SIZE)}`)
+      .setCustomId(`report:pushes:page:${Math.max(0, offset - PAGE_SIZE)}`)
       .setStyle(ButtonStyle.Secondary)
       .setLabel('Previous')
       .setEmoji('⬅️')
       .setDisabled(prevDisabled),
     new ButtonBuilder()
-      .setCustomId(`admin:push-report:page:${offset + PAGE_SIZE}`)
+      .setCustomId(`report:pushes:page:${offset + PAGE_SIZE}`)
       .setStyle(ButtonStyle.Secondary)
       .setLabel('Next')
       .setEmoji('➡️')
@@ -156,7 +156,7 @@ export function buildPushReportDetailPayload(callId, offset) {
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setStyle(ButtonStyle.Link).setLabel('Map').setEmoji('🗺️').setURL(mapUrl(call.x, call.y)),
     new ButtonBuilder()
-      .setCustomId(`admin:push-report:back:${offset}`)
+      .setCustomId(`report:pushes:back:${offset}`)
       .setStyle(ButtonStyle.Secondary)
       .setLabel('Back to list')
       .setEmoji('◀️'),
@@ -171,14 +171,14 @@ export async function handlePushReportCommand(interaction) {
 }
 
 export async function handlePushReportPage(interaction) {
-  // admin:push-report:page:<offset>
+  // report:pushes:page:<offset>
   const offset = parseInt(interaction.customId.split(':')[3], 10) || 0;
   const payload = buildPushReportPayload({ offset, guildId: interaction.guildId });
   return interaction.update(payload);
 }
 
 export async function handlePushReportSelect(interaction) {
-  // admin:push-report:select:<offset>
+  // report:pushes:select:<offset>
   const offset = parseInt(interaction.customId.split(':')[3], 10) || 0;
   const callId = parseInt(interaction.values[0], 10);
   const payload = buildPushReportDetailPayload(callId, offset);
@@ -186,7 +186,7 @@ export async function handlePushReportSelect(interaction) {
 }
 
 export async function handlePushReportBack(interaction) {
-  // admin:push-report:back:<offset>
+  // report:pushes:back:<offset>
   const offset = parseInt(interaction.customId.split(':')[3], 10) || 0;
   const payload = buildPushReportPayload({ offset, guildId: interaction.guildId });
   return interaction.update(payload);

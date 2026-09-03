@@ -151,7 +151,7 @@ test('buildPushReportPayload: select customId carries the current offset', async
 
   const payload = buildPushReportPayload({ offset: 5 });
   const selectRow = payload.components[0].toJSON();
-  assert.equal(selectRow.components[0].custom_id, 'admin:push-report:select:5');
+  assert.equal(selectRow.components[0].custom_id, 'report:pushes:select:5');
 });
 
 test('buildPushReportPayload: Previous disabled on first page, Next disabled on last page', async () => {
@@ -181,7 +181,7 @@ test('buildPushReportDetailPayload: reuses buildPushEmbed and adds Map + Back bu
 
   const row = payload.components[0].toJSON();
   assert.equal(row.components[0].label, 'Map');
-  assert.equal(row.components[1].custom_id, 'admin:push-report:back:5');
+  assert.equal(row.components[1].custom_id, 'report:pushes:back:5');
 });
 
 test('buildPushReportDetailPayload: missing call is handled gracefully', async () => {
@@ -199,7 +199,7 @@ test('handlePushReportPage: parses offset out of the customId and updates the in
 
   let updated = null;
   const interaction = {
-    customId: 'admin:push-report:page:5',
+    customId: 'report:pushes:page:5',
     guildId: 'g1',
     update: async (p) => { updated = p; },
   };
@@ -214,13 +214,13 @@ test('handlePushReportSelect: parses offset + selected call id and shows the dri
 
   let updated = null;
   const interaction = {
-    customId: 'admin:push-report:select:5',
+    customId: 'report:pushes:select:5',
     values: [String(callId)],
     update: async (p) => { updated = p; },
   };
   await handlePushReportSelect(interaction);
   assert.match(updated.embeds[0].toJSON().title, /Resource Push/);
-  assert.equal(updated.components[0].toJSON().components[1].custom_id, 'admin:push-report:back:5');
+  assert.equal(updated.components[0].toJSON().components[1].custom_id, 'report:pushes:back:5');
 });
 
 test('handlePushReportBack: returns to the list at the encoded offset', async () => {
@@ -230,7 +230,7 @@ test('handlePushReportBack: returns to the list at the encoded offset', async ()
 
   let updated = null;
   const interaction = {
-    customId: 'admin:push-report:back:5',
+    customId: 'report:pushes:back:5',
     guildId: 'g1',
     update: async (p) => { updated = p; },
   };

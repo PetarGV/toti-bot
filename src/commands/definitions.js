@@ -22,9 +22,23 @@ for (const { name, description } of SETUP_SUBCOMMANDS) {
   setupCommand.addSubcommand(s => s.setName(name).setDescription(description));
 }
 
+const reportCommand = new SlashCommandBuilder()
+  .setName('report')
+  .setDescription('Reporting commands (admin only)')
+  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
+  .addSubcommand(s =>
+    s.setName('pushes')
+      .setDescription('Detailed resource-push history: who sent how much, to which village')
+  )
+  .addSubcommand(s =>
+    s.setName('roster')
+      .setDescription('Lifetime resource contribution per server member, including zero-pushers')
+  );
+
 export const commandDefinitions = [
   // ── Admin ───────────────────────────────────────────────────────────────
   setupCommand,
+  reportCommand,
 
   new SlashCommandBuilder()
     .setName('admin')
@@ -144,10 +158,6 @@ export const commandDefinitions = [
     .addSubcommand(s =>
       s.setName('onboarding-status')
         .setDescription('List members with incomplete onboarding (missing IGN, crew role, or coords)')
-    )
-    .addSubcommand(s =>
-      s.setName('push-report')
-        .setDescription('Detailed resource-push history: who sent how much, to which village')
     ),
 
   // ── Slash mirrors of panel buttons ──────────────────────────────────────
