@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { prepare } from '../db/client.js';
 import { formatAmount } from '../utils/resources.js';
+import { logger } from '../utils/logger.js';
 
 const PAGE_SIZE = 20;
 const MEDALS = ['🥇', '🥈', '🥉'];
@@ -75,9 +76,10 @@ async function buildRosterPageForGuild(guild, offset) {
   let memberCollection;
   try {
     memberCollection = await guild.members.fetch();
-  } catch {
+  } catch (err) {
+    logger.error('resource-roster: failed to fetch guild members:', err);
     return {
-      embeds: [new EmbedBuilder().setDescription('Could not fetch Discord members. Enable the Server Members Intent in the Discord Developer Portal, then restart the bot.')],
+      embeds: [new EmbedBuilder().setDescription(`Could not fetch Discord members: \`${err.message}\`. If this is the first time, enable the Server Members Intent in the Discord Developer Portal, then restart the bot.`)],
       components: [],
     };
   }
