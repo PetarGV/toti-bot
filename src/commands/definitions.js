@@ -144,6 +144,11 @@ export const commandDefinitions = [
     .addSubcommand(s =>
       s.setName('onboarding-status')
         .setDescription('List members with incomplete onboarding (missing IGN, crew role, or coords)')
+    )
+    .addSubcommand(s =>
+      s.setName('push-report')
+        .setDescription('Detailed resource-push history: who pushed how much to which push')
+        .addUserOption(o => o.setName('requester').setDescription('Only show pushes requested by this user').setRequired(false))
     ),
 
   // ── Slash mirrors of panel buttons ──────────────────────────────────────

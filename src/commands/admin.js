@@ -22,6 +22,7 @@ import { applyCoordsAndDeriveTribe, renameOnboardingChannel, updateOnboardingCha
 import { assignRolesFromIgn, findUnlinkedTbds } from '../handlers/memberRoles.js';
 import { applyMemberSyncRoles } from '../jobs/memberSync.js';
 import { CREW_ROLE_NAMES } from '../utils/roleSelection.js';
+import { handlePushReportCommand } from '../handlers/pushReport.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const DB_PATH  = process.env.DB_PATH || join(__dirname, '../../data/travian.db');
@@ -129,6 +130,10 @@ export async function handleSetup(interaction) {
 
 export async function handleAdmin(interaction) {
   const sub = interaction.options.getSubcommand();
+
+  if (sub === 'push-report') {
+    return handlePushReportCommand(interaction);
+  }
 
   if (sub === 'set-server') {
     const url = interaction.options.getString('url').replace(/\/$/, '');

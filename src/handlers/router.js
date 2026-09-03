@@ -56,6 +56,7 @@ import {
 } from './scoutCall.js';
 import { handleStatusCommand, handleStatusButton } from './status.js';
 import { handleCallsCommand, handleCallsButton, handleCallsPage } from './callsList.js';
+import { handlePushReportPage } from './pushReport.js';
 import {
   handleProfileButton, handleProfileModal, handleProfileCommand, handleNotifyToggle,
   handleEditIgnButton, handleEditIgnModal,
@@ -202,6 +203,7 @@ export async function routeButton(interaction) {
     if (id === 'onboard:set-ign')           return await handleOnboardSetIgnButton(interaction);
     if (id === 'onboard:set-coords')        return await handleOnboardSetCoordsButton(interaction);
     if (id.startsWith('calls:page:')) return await handleCallsPage(interaction);
+    if (id.startsWith('admin:push-report:page:')) return await handlePushReportPage(interaction);
     if (id.startsWith(`${ROLE_BUTTON_PREFIX}:`)) return await handleRoleButton(interaction);
 
     // Specific single-id buttons first
