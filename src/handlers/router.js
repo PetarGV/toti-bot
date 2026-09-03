@@ -77,6 +77,7 @@ import { handleTranslate } from './translate.js';
 import { handleRoleButton, handleRoleSelect } from './roles.js';
 import { ROLE_BUTTON_PREFIX, ROLE_SELECT_CUSTOM_ID } from '../utils/roleSelection.js';
 import { logger } from '../utils/logger.js';
+import { isEnabled, COMMAND_FEATURES, featureForId } from '../utils/features.js';
 import {
   handleResolveConflictsButton,
   handleResolveAmbigButton,
@@ -136,9 +137,19 @@ async function safeReply(interaction, payload) {
   }
 }
 
+// Defense-in-depth: commands and panels are already filtered out of the
+// registered command set, so this should be unreachable in practice — it
+// only guards against a stale Discord command cache after a redeploy.
+async function replyNotEnabled(interaction) {
+  return interaction.reply({ content: 'This feature is not enabled on this server.', ephemeral: true });
+}
+
 // ── Slash command router ─────────────────────────────────────────────────────
 export async function routeCommand(interaction) {
   try {
+    if (!isEnabled(COMMAND_FEATURES[interaction.commandName])) {
+      return await replyNotEnabled(interaction);
+    }
     switch (interaction.commandName) {
       case 'setup':     return await handleSetup(interaction);
       case 'admin':     return await handleAdmin(interaction);
@@ -175,6 +186,7 @@ export async function routeButton(interaction) {
   const id = interaction.customId;
   const [ns, action] = id.split(':');
   try {
+    if (!isEnabled(featureForId(id))) return await replyNotEnabled(interaction);
     if (id === 'panel:status')        return await handleStatusButton(interaction);
     if (id === 'panel:calls')         return await handleCallsButton(interaction);
     if (id === 'panel:profile')       return await handleProfileButton(interaction);
@@ -288,6 +300,7 @@ export async function routeButton(interaction) {
 export async function routeSelect(interaction) {
   const id = interaction.customId;
   try {
+    if (!isEnabled(featureForId(id))) return await replyNotEnabled(interaction);
     if (id === 'profile:tribe-select')   return await handleTribeSelect(interaction);
     if (id === 'help:category')          return await handleHelpSelect(interaction);
     if (id === ROLE_SELECT_CUSTOM_ID)    return await handleRoleSelect(interaction);
@@ -308,6 +321,7 @@ export async function routeSelect(interaction) {
 export async function routeModal(interaction) {
   const id = interaction.customId;
   try {
+    if (!isEnabled(featureForId(id))) return await replyNotEnabled(interaction);
     if (id === 'whois:lookup')                  return await handleWhoisModalSubmit(interaction);
     if (id === 'nearby:lookup')                 return await handleNearbyModalSubmit(interaction);
     if (id.startsWith('push:create:'))          return await handlePushCreateModal(interaction);
