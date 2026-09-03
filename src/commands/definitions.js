@@ -147,8 +147,7 @@ export const commandDefinitions = [
     )
     .addSubcommand(s =>
       s.setName('push-report')
-        .setDescription('Detailed resource-push history: who pushed how much to which push')
-        .addUserOption(o => o.setName('requester').setDescription('Only show pushes requested by this user').setRequired(false))
+        .setDescription('Detailed resource-push history: who sent how much, to which village')
     ),
 
   // ── Slash mirrors of panel buttons ──────────────────────────────────────

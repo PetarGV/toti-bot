@@ -17,7 +17,12 @@ function pledge(callId, userId, amount) {
   prepare('INSERT INTO pledges (call_id, user_id, amount) VALUES (?, ?, ?)').run(callId, userId, String(amount));
 }
 
-test('fetchPushReportPage: includes pushes of every status, newest first', async () => {
+function seedVillage(x, y, player, alliance = null) {
+  prepare('INSERT INTO x_world (id, x, y, player, alliance) VALUES (?, ?, ?, ?, ?)')
+    .run(x * 10000 + y, x, y, player, alliance);
+}
+
+test('fetchPushReportPage: includes pushes of every status, newest first (id tiebreak)', async () => {
   await setupTestDb();
   resetTables();
   const c1 = makeCall({ status: 'open' });
@@ -27,7 +32,7 @@ test('fetchPushReportPage: includes pushes of every status, newest first', async
 
   const { rows, total } = fetchPushReportPage({});
   assert.equal(total, 4);
-  assert.deepEqual(rows.map(r => r.id), [c4, c3, c2, c1]); // created_at DESC (insertion order tiebreak via id)
+  assert.deepEqual(rows.map(r => r.id), [c4, c3, c2, c1]);
 });
 
 test('fetchPushReportPage: excludes non-push call types', async () => {
@@ -44,18 +49,6 @@ test('fetchPushReportPage: excludes non-push call types', async () => {
   assert.equal(rows[0].type, 'push:iron');
 });
 
-test('fetchPushReportPage: requesterId filters to that author only', async () => {
-  await setupTestDb();
-  resetTables();
-  makeCall({ author_id: '111' });
-  makeCall({ author_id: '222' });
-  makeCall({ author_id: '111' });
-
-  const { rows, total } = fetchPushReportPage({ requesterId: '111' });
-  assert.equal(total, 2);
-  assert.ok(rows.every(r => r.author_id === '111'));
-});
-
 test('fetchPushReportPage: pagination respects offset and page size', async () => {
   await setupTestDb();
   resetTables();
@@ -69,14 +62,14 @@ test('fetchPushReportPage: pagination respects offset and page size', async () =
   assert.equal(page2.total, 15);
 });
 
-test('renderPushReportLine: shows top 3 senders ordered by amount desc, not insertion order', async () => {
+test('renderPushReportLine: lists every sender ordered by amount desc, not just the top 3', async () => {
   await setupTestDb();
   resetTables();
   const callId = makeCall({ type: 'push:crop', x: 5, y: -5, amount: 10000 });
   pledge(callId, 'a', 1000);
   pledge(callId, 'b', 5000);
   pledge(callId, 'c', 3000);
-  pledge(callId, 'd', 9000); // 4th pledge, should be excluded from top-3 but counted
+  pledge(callId, 'd', 9000);
 
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   const line = renderPushReportLine(call, 'guild1');
@@ -84,20 +77,38 @@ test('renderPushReportLine: shows top 3 senders ordered by amount desc, not inse
   assert.match(line, /🌾 \*\*Crop\*\*/);
   assert.match(line, /\(5\|-5\)/);
   assert.match(line, /4 senders/);
-  // Order: d (9000), b (5000), c (3000) — a (1000) excluded from top 3
-  const topLine = line.split('\n').find(l => l.includes('Top:'));
-  assert.match(topLine, /<@d>.*<@b>.*<@c>/s);
-  assert.ok(!topLine.includes('<@a>'));
+  const sendersLine = line.split('\n').find(l => l.includes('Senders:'));
+  assert.match(sendersLine, /<@d>.*<@b>.*<@c>.*<@a>/s); // all 4, amount desc
 });
 
-test('renderPushReportLine: no pledges yet omits the Top line', async () => {
+test('renderPushReportLine: shows the destination village owner (and alliance) from x_world', async () => {
+  await setupTestDb();
+  resetTables();
+  seedVillage(5, -5, 'EnemyPlayer', 'ABC');
+  const callId = makeCall({ x: 5, y: -5 });
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  const line = renderPushReportLine(call, 'g1');
+  assert.match(line, /\(5\|-5\) — EnemyPlayer \[ABC\]/);
+});
+
+test('renderPushReportLine: no x_world match omits the owner suffix', async () => {
+  await setupTestDb();
+  resetTables();
+  const callId = makeCall({ x: 99, y: 99 });
+  const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
+  const line = renderPushReportLine(call, 'g1');
+  assert.match(line, /\(99\|99\) — /); // status badge follows, no owner text before it
+  assert.ok(!line.includes('EnemyPlayer'));
+});
+
+test('renderPushReportLine: no pledges yet shows "*no senders*" and 0 senders', async () => {
   await setupTestDb();
   resetTables();
   const callId = makeCall({});
   const call = prepare('SELECT * FROM calls WHERE id = ?').get(callId);
   const line = renderPushReportLine(call, 'guild1');
-  assert.ok(!line.includes('Top:'));
   assert.match(line, /0 senders/);
+  assert.match(line, /Senders: \*no senders\*/);
 });
 
 test('renderPushReportLine: includes a Jump link only when message_id/channel_id are set', async () => {
@@ -146,55 +157,28 @@ test('buildPushReportPayload: Previous disabled on first page, Next disabled on 
   assert.equal(page2.components[1].disabled, true);  // Next
 });
 
-test('buildPushReportPayload: pagination buttons carry the requester filter forward', async () => {
-  await setupTestDb();
-  resetTables();
-  for (let i = 0; i < 15; i++) makeCall({ author_id: '555' });
-
-  const payload = buildPushReportPayload({ offset: 0, requesterId: '555' }).components[0].toJSON();
-  assert.equal(payload.components[1].custom_id, 'admin:push-report:page:10:555');
-});
-
-test('buildPushReportPayload: no filter uses "_" sentinel in the customId', async () => {
+test('buildPushReportPayload: pagination customId carries only the offset, no filter', async () => {
   await setupTestDb();
   resetTables();
   for (let i = 0; i < 15; i++) makeCall({});
 
   const payload = buildPushReportPayload({ offset: 0 }).components[0].toJSON();
-  assert.equal(payload.components[1].custom_id, 'admin:push-report:page:10:_');
+  assert.equal(payload.components[1].custom_id, 'admin:push-report:page:10');
 });
 
-test('handlePushReportPage: parses offset and filter out of the customId and updates the interaction', async () => {
+test('handlePushReportPage: parses offset out of the customId and updates the interaction', async () => {
   await setupTestDb();
   resetTables();
-  for (let i = 0; i < 12; i++) makeCall({ author_id: '777' });
+  for (let i = 0; i < 12; i++) makeCall({});
 
   let updated = null;
   const interaction = {
-    customId: 'admin:push-report:page:10:777',
+    customId: 'admin:push-report:page:10',
     guildId: 'g1',
     update: async (p) => { updated = p; },
   };
   await handlePushReportPage(interaction);
   assert.ok(updated);
   const embed = updated.embeds[0].toJSON();
-  assert.match(embed.title, /<@777>/);
   assert.match(embed.title, /page 2\/2/);
-});
-
-test('handlePushReportPage: "_" filter tag means no requester filter', async () => {
-  await setupTestDb();
-  resetTables();
-  makeCall({ author_id: '1' });
-  makeCall({ author_id: '2' });
-
-  let updated = null;
-  const interaction = {
-    customId: 'admin:push-report:page:0:_',
-    guildId: 'g1',
-    update: async (p) => { updated = p; },
-  };
-  await handlePushReportPage(interaction);
-  const embed = updated.embeds[0].toJSON();
-  assert.match(embed.footer.text, /^2 pushes total$/);
 });
