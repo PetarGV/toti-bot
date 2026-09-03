@@ -182,3 +182,22 @@ sudo systemctl status docker
 ## Firewall
 
 Health endpoint is bound to `127.0.0.1` only via docker-compose (not reachable from internet). No additional firewall config needed for the bot to function. If you want external uptime monitoring, change the port mapping to `8080:8080` (drop the `127.0.0.1:` prefix) and open port 8080 in your VPS firewall.
+
+---
+
+## Running a second, feature-limited instance in another server
+
+The same codebase can run a second bot for a different Discord server with only a subset of features enabled — e.g. just Scout + Resource Push. This is a **second deployment**, not a code fork: same repo, its own Discord application/token, its own `GUILD_ID`, its own `data/` volume, and one extra env var.
+
+1. Create a second application at [discord.com/developers/applications](https://discord.com/developers/applications) and invite its bot to the new server (see the [Setup checklist](README.md#setup-checklist)).
+2. Deploy it like any instance above (Fly app / VPS folder), with its own `.env`:
+   ```bash
+   DISCORD_TOKEN=...   # the new app's token
+   CLIENT_ID=...        # the new app's ID
+   GUILD_ID=...          # the new server's ID
+   FEATURES=scout,resources,map
+   ```
+3. `deploy-commands` for that instance registers **only** the commands for the enabled features — disabled ones (e.g. `/defense`, `/offense`, `/timer`, `/profile`) never appear in that server's command list.
+4. Run `/setup scout` and `/setup resources` in the appropriate channels. `/setup` itself will only offer subcommands for enabled panels.
+
+Leaving `FEATURES` unset (as on your main instance) enables everything — today's behavior, unchanged. See `.env.example` for the full list of feature keys.

@@ -23,6 +23,7 @@ import { handleScoutReportMessage } from './handlers/scoutReportUpload.js';
 import { refreshOpenCalls } from './handlers/calls.js';
 import { logger, flushLogs } from './utils/logger.js';
 import { recordError } from './utils/metrics.js';
+import { isEnabled } from './utils/features.js';
 
 // Side-effect imports: register renderers with the call registry
 import './handlers/resourcePush.js';
@@ -57,9 +58,9 @@ client.once('clientReady', async () => {
   startExpiryJob(client);
   startScoutReportCleanupJob(client);
   startBackupJob(client);
-  startTimerTickJob(client);
-  startMemberSyncJob(client);
-  startIntelDashboardJob(client);
+  if (isEnabled('timer')) startTimerTickJob(client);
+  if (isEnabled('onboarding')) startMemberSyncJob(client);
+  if (isEnabled('defense')) startIntelDashboardJob(client);
   catchUpStaleJobs(client).catch(err => logger.error('Startup catch-up failed:', err));
 });
 
@@ -78,6 +79,7 @@ async function catchUpStaleJobs(client) {
       return; // skip sync if fetch failed — would run against stale data
     }
   }
+  if (!isEnabled('onboarding')) return;
   const lastSync = parseInt(getConfig('last_sync_at') ?? '0', 10);
   if (now - lastSync > STALE_MEMBER_SYNC_SEC) {
     logger.info(`Startup: member sync is stale (last sync ${lastSync || 'never'}) — running now`);
@@ -112,6 +114,7 @@ client.on('interactionCreate', async (interaction) => {
 });
 
 client.on(Events.GuildMemberAdd, async (member) => {
+  if (!isEnabled('onboarding')) return;
   try {
     await handleGuildMemberAdd(member);
   } catch (err) {
@@ -121,6 +124,7 @@ client.on(Events.GuildMemberAdd, async (member) => {
 });
 
 client.on(Events.GuildMemberRemove, async (member) => {
+  if (!isEnabled('onboarding')) return;
   try {
     await handleGuildMemberRemove(member);
   } catch (err) {

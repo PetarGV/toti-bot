@@ -2,8 +2,10 @@ import {
   ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder,
 } from 'discord.js';
 import { ROLE_BUTTON_PREFIX, ROLE_RESET_CUSTOM_ID, ROLE_SELECTIONS } from '../utils/roleSelection.js';
+import { isEnabled, PANEL_FEATURES } from '../utils/features.js';
 
-export const PANEL_TYPES = ['offense', 'resources', 'scout', 'general', 'roles', 'timer', 'reports', 'leadership', 'leadership-banner'];
+export const PANEL_TYPES = ['offense', 'resources', 'scout', 'general', 'roles', 'timer', 'reports', 'leadership', 'leadership-banner']
+  .filter(type => isEnabled(PANEL_FEATURES[type]));
 
 const COLOR = {
   defense:     0xe74c3c,

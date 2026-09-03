@@ -1,20 +1,30 @@
 import { SlashCommandBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import { langChoices } from '../utils/translation/locales.js';
+import { isEnabled, COMMAND_FEATURES, PANEL_FEATURES } from '../utils/features.js';
+
+const SETUP_SUBCOMMANDS = [
+  { name: 'reports', description: 'Incoming attack reports panel' },
+  { name: 'leadership', description: 'Intel dashboard panel (leadership channel)' },
+  { name: 'offense', description: 'Offense operations panel' },
+  { name: 'scout', description: 'Scouting & intel panel' },
+  { name: 'resources', description: 'Resource push panel' },
+  { name: 'general', description: 'Status & overview panel' },
+  { name: 'roles', description: 'Crew role selection panel' },
+  { name: 'timer', description: 'Personal timer control panel' },
+];
+
+const setupCommand = new SlashCommandBuilder()
+  .setName('setup')
+  .setDescription('Post a pinned panel in this channel (admin only)')
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels);
+for (const { name, description } of SETUP_SUBCOMMANDS) {
+  if (!isEnabled(PANEL_FEATURES[name])) continue;
+  setupCommand.addSubcommand(s => s.setName(name).setDescription(description));
+}
 
 export const commandDefinitions = [
   // ── Admin ───────────────────────────────────────────────────────────────
-  new SlashCommandBuilder()
-    .setName('setup')
-    .setDescription('Post a pinned panel in this channel (admin only)')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels)
-    .addSubcommand(s => s.setName('reports').setDescription('Incoming attack reports panel'))
-    .addSubcommand(s => s.setName('leadership').setDescription('Intel dashboard panel (leadership channel)'))
-    .addSubcommand(s => s.setName('offense').setDescription('Offense operations panel'))
-    .addSubcommand(s => s.setName('scout').setDescription('Scouting & intel panel'))
-    .addSubcommand(s => s.setName('resources').setDescription('Resource push panel'))
-    .addSubcommand(s => s.setName('general').setDescription('Status & overview panel'))
-    .addSubcommand(s => s.setName('roles').setDescription('Crew role selection panel'))
-    .addSubcommand(s => s.setName('timer').setDescription('Personal timer control panel')),
+  setupCommand,
 
   new SlashCommandBuilder()
     .setName('admin')
@@ -302,4 +312,6 @@ export const commandDefinitions = [
           { name: 'Most Active Requesters', value: 'requesters' },
         )
     ),
-].map(c => c.toJSON());
+]
+  .filter(c => isEnabled(COMMAND_FEATURES[c.name]))
+  .map(c => c.toJSON());
