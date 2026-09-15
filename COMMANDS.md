@@ -82,7 +82,7 @@ Request scouting and lookup village info from cached map data.
 |---|---|
 | 👀 Scout Request | Open scout modal |
 | 🔍 Whois Lookup | Open whois modal |
-| 📍 Report Sighting | (placeholder, not implemented) |
+| 📍 Report Sighting | Open sighting modal (coords + notes, posts to `#scout-reports`) |
 
 ### Action buttons (on each scout embed)
 | Button | Who | Action |

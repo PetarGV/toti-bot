@@ -124,6 +124,7 @@ import {
   handleIntelCreateDefActiveButton,
   handleIntelCreateDefPermaButton,
 } from './intel.js';
+import { handleReportSightingButton, handleReportSightingModal } from './scoutSighting.js';
 
 async function notImplemented(interaction) {
   const id = interaction.customId ?? interaction.commandName;
@@ -292,8 +293,9 @@ export async function routeButton(interaction) {
       if (action === 'create_def_perma')  return await handleIntelCreateDefPermaButton(interaction);
     }
 
+    if (id === 'intel:report') return await handleReportSightingButton(interaction);
+
     // Remaining unimplemented
-    if (id === 'intel:report') return await notImplemented(interaction);
 
     return await interaction.reply({ content: 'Unknown button.', ephemeral: true });
   } catch (err) {
@@ -357,6 +359,7 @@ export async function routeModal(interaction) {
     if (id === 'report:manual_submit') return await handleReportManualModal(interaction);
     if (id === 'intel:target_submit')   return await handleIntelTargetModal(interaction);
     if (id === 'intel:attacker_submit') return await handleIntelAttackerModal(interaction);
+    if (id === 'intel:report:submit')   return await handleReportSightingModal(interaction);
     return await notImplemented(interaction);
   } catch (err) {
     logger.error('Modal error [%s]:', id, err);

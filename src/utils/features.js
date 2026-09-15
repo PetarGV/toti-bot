@@ -85,6 +85,7 @@ const ID_FEATURE_PREFIXES = [
   ['sending-def', 'defense'],
   ['reclassify', 'defense'],
   ['intel:whois', 'map'],
+  ['intel:report', 'scout'],
   ['whois', 'map'],
   ['nearby', 'map'],
   ['general:nearby', 'map'],
