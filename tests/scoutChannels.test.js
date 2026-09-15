@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { ChannelType } from 'discord.js';
 import { setupTestDb, resetTables } from './helpers/testDb.js';
-import { getConfig } from '../src/db/client.js';
+import { getConfig, setConfig } from '../src/db/client.js';
 import { handleSetup } from '../src/commands/admin.js';
 import {
   findChannelByNameAndType,
@@ -19,6 +19,9 @@ function fakeGuild(existing = [], calls = null) {
   const cache = {
     values() {
       return channels.values();
+    },
+    get(id) {
+      return channels.find(channel => channel.id === id) ?? null;
     },
   };
 
@@ -102,6 +105,43 @@ test('ensureScoutInfrastructure ignores same-named archive channel outside scout
   assert.equal(result.archiveChannel.parentId, 'cat-1');
   assert.notEqual(result.archiveChannel.id, 'archive-old');
   assert.equal(guild._channels.length, 3);
+});
+
+test('ensureScoutInfrastructure uses configured category and channel over name search', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const guild = fakeGuild([
+    fakeChannel('cat-1', 'Scouting', ChannelType.GuildCategory),
+    fakeChannel('archive-1', 'scout-reports', ChannelType.GuildText, 'cat-1'),
+    fakeChannel('custom-cat', 'Intel HQ', ChannelType.GuildCategory),
+    fakeChannel('custom-archive', 'intel-dump', ChannelType.GuildText, 'custom-cat'),
+  ]);
+  setConfig('scouting_category_id', 'custom-cat');
+  setConfig('scout_reports_channel_id', 'custom-archive');
+
+  const result = await ensureScoutInfrastructure(guild);
+
+  assert.equal(result.category.id, 'custom-cat');
+  assert.equal(result.archiveChannel.id, 'custom-archive');
+  assert.equal(guild._channels.length, 4);
+});
+
+test('ensureScoutInfrastructure falls back to name search when configured channel no longer exists', async () => {
+  await setupTestDb();
+  resetTables();
+
+  const guild = fakeGuild([
+    fakeChannel('cat-1', 'Scouting', ChannelType.GuildCategory),
+    fakeChannel('archive-1', 'scout-reports', ChannelType.GuildText, 'cat-1'),
+  ]);
+  setConfig('scouting_category_id', 'deleted-cat');
+  setConfig('scout_reports_channel_id', 'deleted-archive');
+
+  const result = await ensureScoutInfrastructure(guild);
+
+  assert.equal(result.category.id, 'cat-1');
+  assert.equal(result.archiveChannel.id, 'archive-1');
 });
 
 test('handleSetup scout creates infrastructure before deploying panel', async () => {

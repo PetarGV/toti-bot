@@ -1,5 +1,5 @@
 import { ChannelType } from 'discord.js';
-import { setConfig } from '../db/client.js';
+import { setConfig, getConfig } from '../db/client.js';
 import {
   SCOUT_CATEGORY_NAME,
   SCOUT_REPORTS_CHANNEL_NAME,
@@ -24,10 +24,18 @@ export function findChildChannelByName(guild, name, parentId) {
     ) ?? null;
 }
 
+function resolveConfiguredChannel(guild, configKey, type) {
+  const id = getConfig(configKey);
+  if (!id) return null;
+  const channel = guild?.channels?.cache?.get?.(id);
+  return channel && channel.type === type ? channel : null;
+}
+
 export async function ensureScoutInfrastructure(guild) {
   if (!guild) throw new Error('Scout setup requires a Discord guild.');
 
-  let category = findChannelByNameAndType(guild, SCOUT_CATEGORY_NAME, ChannelType.GuildCategory);
+  let category = resolveConfiguredChannel(guild, 'scouting_category_id', ChannelType.GuildCategory)
+    ?? findChannelByNameAndType(guild, SCOUT_CATEGORY_NAME, ChannelType.GuildCategory);
   if (!category) {
     category = await guild.channels.create({
       name: SCOUT_CATEGORY_NAME,
@@ -35,7 +43,8 @@ export async function ensureScoutInfrastructure(guild) {
     });
   }
 
-  let archiveChannel = findChildChannelByName(guild, SCOUT_REPORTS_CHANNEL_NAME, category.id);
+  let archiveChannel = resolveConfiguredChannel(guild, 'scout_reports_channel_id', ChannelType.GuildText)
+    ?? findChildChannelByName(guild, SCOUT_REPORTS_CHANNEL_NAME, category.id);
 
   if (!archiveChannel) {
     archiveChannel = await guild.channels.create({

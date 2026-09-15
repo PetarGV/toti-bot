@@ -199,6 +199,7 @@ All admin commands require Administrator permission.
 |---|---|---|
 | `/admin set-server` | `url` | Update Travian server URL (no restart needed) |
 | `/admin set-welcome-channel` | `channel` | Set the channel where new members receive the onboarding greeting |
+| `/admin set-scout-channels` | `[category]` `[channel]` | Set the scout request category and/or the scout reports archive channel (at least one required) |
 
 ### Member & IGN management
 | Command | Args | Description |

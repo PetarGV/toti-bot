@@ -456,6 +456,28 @@ export async function handleAdmin(interaction) {
     });
   }
 
+  if (sub === 'set-scout-channels') {
+    const category = interaction.options.getChannel('category');
+    const channel = interaction.options.getChannel('channel');
+    if (!category && !channel) {
+      return interaction.reply({
+        content: '❌ Provide at least one of `category` or `channel`.',
+        ephemeral: true,
+      });
+    }
+
+    const parts = [];
+    if (category) {
+      setConfig('scouting_category_id', category.id);
+      parts.push(`scout category set to **${category.name}** (new scout request channels will be created there)`);
+    }
+    if (channel) {
+      setConfig('scout_reports_channel_id', channel.id);
+      parts.push(`scout reports channel set to <#${channel.id}> (submitted screenshots will be archived there)`);
+    }
+    return interaction.reply({ content: `✅ ${parts.join('; ')}.`, ephemeral: true });
+  }
+
   if (sub === 'set-coords') {
     const target = interaction.options.getUser('discord');
     const coords = interaction.options.getString('coords').trim();

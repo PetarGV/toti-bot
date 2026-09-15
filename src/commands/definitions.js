@@ -118,6 +118,22 @@ export const commandDefinitions = [
         )
     )
     .addSubcommand(s =>
+      s.setName('set-scout-channels')
+        .setDescription('Set the category and/or channel used for scout requests and report archiving')
+        .addChannelOption(o =>
+          o.setName('category')
+            .setDescription('Category for temporary scout request channels')
+            .setRequired(false)
+            .addChannelTypes(ChannelType.GuildCategory)
+        )
+        .addChannelOption(o =>
+          o.setName('channel')
+            .setDescription('Channel where submitted scout screenshots are archived')
+            .setRequired(false)
+            .addChannelTypes(ChannelType.GuildText)
+        )
+    )
+    .addSubcommand(s =>
       s.setName('set-coords')
         .setDescription('Set home village coords for a user (auto-derives tribe + assigns Discord role)')
         .addUserOption(o => o.setName('discord').setDescription('Discord user').setRequired(true))
